@@ -129,7 +129,8 @@
 <script>
 // ─── SCENE SETUP ─────────────────────────────────────────────────────────────
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0xaaccee, 40, 160);
+scene.background = new THREE.Color(0x87ceeb); // Tageshimmel als Standard
+scene.fog = new THREE.Fog(0x87ceeb, 40, 160);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -139,7 +140,8 @@ renderer.setPixelRatio(window.devicePixelRatio);
 document.body.appendChild(renderer.domElement);
 
 const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 300);
-camera.position.set(0, 8, -14);
+camera.position.set(0, 8, 14);
+camera.lookAt(0, 0, 0);
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -523,6 +525,7 @@ function updateDayNight(dt) {
     skyCol = nightCol.clone();
   }
   renderer.setClearColor(skyCol);
+  scene.background.set(skyCol);
   scene.fog.color = skyCol;
 
   // Streetlights on at night
@@ -611,7 +614,7 @@ function animate() {
     wheels.forEach(w => { w.rotation.x += speed * dt * 1.5 * (keys['KeyS'] ? -1 : 1); });
 
     // Camera follow
-    const camOffset = new THREE.Vector3(0, 7, -13);
+    const camOffset = new THREE.Vector3(0, 7, 13);
     camOffset.applyQuaternion(vehicleGroup.quaternion);
     const targetCamPos = vehicleGroup.position.clone().add(camOffset);
     camera.position.lerp(targetCamPos, 0.08);
