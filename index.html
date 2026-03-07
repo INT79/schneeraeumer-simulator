@@ -97,6 +97,30 @@ canvas#gameCanvas { display: block; position: fixed; top: 0; left: 0; }
   text-align: center; cursor: pointer; font-size: 12px;
   pointer-events: all;
 }
+
+#settings-btn {
+  position: absolute; top: 10px; right: 190px;
+  background: rgba(0,0,0,0.7); color: #fff; border: 1px solid #555;
+  border-radius: 6px; padding: 6px 10px; cursor: pointer; font-size: 14px;
+  z-index: 20; pointer-events: all;
+}
+#settings-panel {
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+  background: rgba(10,20,30,0.95); color: #eee; border: 1px solid #444;
+  border-radius: 12px; padding: 20px; min-width: 340px; z-index: 100;
+  display: none; font-family: monospace; pointer-events: all;
+}
+#settings-panel h3 { margin: 0 0 14px; color: #FFD600; font-size: 16px; }
+.key-row { display: flex; justify-content: space-between; align-items: center; margin: 6px 0; }
+.key-row label { color: #aaa; font-size: 13px; flex: 1; }
+.key-btn {
+  background: #222; color: #FFD600; border: 1px solid #555;
+  border-radius: 4px; padding: 4px 12px; cursor: pointer; font-size: 13px;
+  min-width: 60px; text-align: center;
+}
+.key-btn.listening { background: #1a3a1a; border-color: #4f4; color: #4f4; }
+.key-btn:hover { border-color: #FFD600; }
+#settings-close { margin-top: 14px; background: #333; color: #fff; border: 1px solid #555; border-radius: 6px; padding: 6px 16px; cursor: pointer; float: right; }
 </style>
 </head>
 <body>
@@ -144,6 +168,23 @@ canvas#gameCanvas { display: block; position: fixed; top: 0; left: 0; }
   <span id="w-close">Schließen (TAB)</span>
 </div>
 
+<button id="settings-btn" title="Tastenbelegung (Einstellungen)">⚙️</button>
+<div id="settings-panel">
+  <h3>⚙️ Tastenbelegung</h3>
+  <div class="key-row"><label>Vorwärts</label><button class="key-btn" data-action="forward">W</button></div>
+  <div class="key-row"><label>Rückwärts</label><button class="key-btn" data-action="backward">S</button></div>
+  <div class="key-row"><label>Rechts lenken</label><button class="key-btn" data-action="steerRight">A</button></div>
+  <div class="key-row"><label>Links lenken</label><button class="key-btn" data-action="steerLeft">D</button></div>
+  <div class="key-row"><label>Bremse</label><button class="key-btn" data-action="brake">Space</button></div>
+  <div class="key-row"><label>Bürste an/aus</label><button class="key-btn" data-action="brush">B</button></div>
+  <div class="key-row"><label>Streuer an/aus</label><button class="key-btn" data-action="spreader">X</button></div>
+  <div class="key-row"><label>Aussteigen/Einsteigen</label><button class="key-btn" data-action="exit">E</button></div>
+  <div class="key-row"><label>Schaufel (Fußgänger)</label><button class="key-btn" data-action="shovel">F</button></div>
+  <div class="key-row"><label>Sound Mute</label><button class="key-btn" data-action="mute">M</button></div>
+  <button id="settings-close">Schließen</button>
+  <div style="clear:both"></div>
+</div>
+
 <script src="https://unpkg.com/three@0.152.2/build/three.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
 <script>
@@ -151,6 +192,27 @@ canvas#gameCanvas { display: block; position: fixed; top: 0; left: 0; }
 // ================================================================
 //  SCHNEERÄUM-SIMULATOR V2  –  IM NORDEN
 // ================================================================
+
+// ================================================================
+//  KEY BINDINGS (must be defined early – used in animate loop)
+// ================================================================
+const keyBindings = {
+  forward:    'KeyW',
+  backward:   'KeyS',
+  steerRight: 'KeyA',
+  steerLeft:  'KeyD',
+  brake:      'Space',
+  brush:      'KeyB',
+  spreader:   'KeyX',
+  exit:       'KeyE',
+  shovel:     'KeyF',
+  mute:       'KeyM',
+};
+// Lade gespeicherte Belegungen aus localStorage
+try {
+  const saved = localStorage.getItem('schnee_keybindings');
+  if (saved) Object.assign(keyBindings, JSON.parse(saved));
+} catch(e) {}
 
 // ================================================================
 //  SOUND SYSTEM (Web Audio API – kein CDN)
@@ -1051,13 +1113,13 @@ let snowRefill = 0;
 
 document.addEventListener('keydown', e => {
   keys[e.code] = true;
-  if (e.code === 'KeyB' && !onFoot) { brushOn   = !brushOn;   updateHUD(); }
-  if (e.code === 'KeyX' && !onFoot) { spreaderOn = !spreaderOn; updateHUD(); }
-  if (e.code === 'KeyE') toggleFoot();
-  if (e.code === 'KeyF' && onFoot && playerPed && shovelAnim <= 0) {
+  if (e.code === keyBindings.brush && !onFoot) { brushOn   = !brushOn;   updateHUD(); }
+  if (e.code === keyBindings.spreader && !onFoot) { spreaderOn = !spreaderOn; updateHUD(); }
+  if (e.code === keyBindings.exit) toggleFoot();
+  if (e.code === keyBindings.shovel && onFoot && playerPed && shovelAnim <= 0) {
     shovelAnim = 0.65; // Schaufel-Animation starten
   }
-  if (e.code === 'KeyM') {
+  if (e.code === keyBindings.mute) {
     soundEnabled = !soundEnabled;
     if (!soundEnabled) {
       if (motorGain) motorGain.gain.setTargetAtTime(0, audioCtx ? audioCtx.currentTime : 0, 0.05);
@@ -1337,15 +1399,15 @@ function animate() {
   if (!onFoot) {
     chassisCannonBody.wakeUp(); // verhindert Sleep-Problem
 
-    if (keys['KeyW'])     engineForce = Math.min(engineForce + 3000*dt, MAX_FORCE);
-    else if (keys['KeyS']) engineForce = Math.max(engineForce - 3000*dt, -MAX_FORCE*0.45);
-    else                   engineForce *= 0.85;
+    if (keys[keyBindings.forward])     engineForce = Math.min(engineForce + 3000*dt, MAX_FORCE);
+    else if (keys[keyBindings.backward]) engineForce = Math.max(engineForce - 3000*dt, -MAX_FORCE*0.45);
+    else                                  engineForce *= 0.85;
 
-    if      (keys['KeyA']) steeringVal = Math.min(steeringVal + 2.5*dt, MAX_STEER);
-    else if (keys['KeyD']) steeringVal = Math.max(steeringVal - 2.5*dt, -MAX_STEER);
-    else                   steeringVal *= 0.75;
+    if      (keys[keyBindings.steerRight]) steeringVal = Math.min(steeringVal + 2.5*dt, MAX_STEER);
+    else if (keys[keyBindings.steerLeft])  steeringVal = Math.max(steeringVal - 2.5*dt, -MAX_STEER);
+    else                                   steeringVal *= 0.75;
 
-    const brake = keys['Space'] ? MAX_BRAKE : (Math.abs(engineForce) < 10 ? 5 : 0);
+    const brake = keys[keyBindings.brake] ? MAX_BRAKE : (Math.abs(engineForce) < 10 ? 5 : 0);
 
     rayVehicle.setSteeringValue(steeringVal, 0);
     rayVehicle.setSteeringValue(steeringVal, 1);
@@ -1438,20 +1500,20 @@ function animate() {
     // Pedestrian mode
     if (playerPed) {
       const spd = 0.055;
-      if (keys['KeyW']) {
+      if (keys[keyBindings.forward]) {
         const fwd = new THREE.Vector3(
           -Math.sin(playerPed.rotation.y), 0, -Math.cos(playerPed.rotation.y)
         );
         playerPed.position.addScaledVector(fwd, spd);
       }
-      if (keys['KeyS']) {
+      if (keys[keyBindings.backward]) {
         const bk = new THREE.Vector3(
           Math.sin(playerPed.rotation.y), 0, Math.cos(playerPed.rotation.y)
         );
         playerPed.position.addScaledVector(bk, spd);
       }
-      if (keys['KeyA']) playerPed.rotation.y += 0.04;
-      if (keys['KeyD']) playerPed.rotation.y -= 0.04;
+      if (keys[keyBindings.steerRight]) playerPed.rotation.y += 0.04;
+      if (keys[keyBindings.steerLeft])  playerPed.rotation.y -= 0.04;
 
       // Schaufel-Animation
       if (shovelAnim > 0) {
@@ -1569,6 +1631,73 @@ scene.background = new THREE.Color(0xaabbcc);
 animate();
 
 console.log('%c✅ Schneeräum-Simulator V2 – IM NORDEN geladen!', 'color:#FFD600;font-weight:bold;font-size:14px');
+
+// ================================================================
+//  KEY BINDING SYSTEM – UI WIRING
+// ================================================================
+function saveKeyBindings() {
+  try { localStorage.setItem('schnee_keybindings', JSON.stringify(keyBindings)); } catch(e) {}
+}
+
+function keyCodeToDisplay(code) {
+  if (code === 'Space') return 'Space';
+  if (code.startsWith('Key')) return code.slice(3);
+  if (code.startsWith('Digit')) return code.slice(5);
+  if (code.startsWith('Arrow')) return '↑↓←→'[['Up','Down','Left','Right'].indexOf(code.slice(5))];
+  return code;
+}
+
+// Buttons mit aktueller Belegung befüllen
+document.querySelectorAll('.key-btn').forEach(btn => {
+  const action = btn.dataset.action;
+  btn.textContent = keyCodeToDisplay(keyBindings[action] || '?');
+});
+
+let listeningBtn = null;
+document.querySelectorAll('.key-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    if (listeningBtn) {
+      listeningBtn.classList.remove('listening');
+      listeningBtn.textContent = keyCodeToDisplay(keyBindings[listeningBtn.dataset.action]);
+    }
+    listeningBtn = btn;
+    btn.classList.add('listening');
+    btn.textContent = '...';
+  });
+});
+
+document.addEventListener('keydown', e => {
+  if (listeningBtn) {
+    e.preventDefault();
+    e.stopPropagation();
+    const action = listeningBtn.dataset.action;
+    // Doppelbelegung prüfen + auflösen
+    for (const [a, code] of Object.entries(keyBindings)) {
+      if (code === e.code && a !== action) {
+        keyBindings[a] = keyBindings[action]; // alten Wert tauschen
+        document.querySelector(`.key-btn[data-action="${a}"]`).textContent = keyCodeToDisplay(keyBindings[a]);
+      }
+    }
+    keyBindings[action] = e.code;
+    listeningBtn.textContent = keyCodeToDisplay(e.code);
+    listeningBtn.classList.remove('listening');
+    listeningBtn = null;
+    saveKeyBindings();
+    return;
+  }
+}, true);
+
+document.getElementById('settings-btn').addEventListener('click', () => {
+  document.getElementById('settings-panel').style.display = 'block';
+});
+document.getElementById('settings-close').addEventListener('click', () => {
+  document.getElementById('settings-panel').style.display = 'none';
+  if (listeningBtn) {
+    listeningBtn.classList.remove('listening');
+    listeningBtn.textContent = keyCodeToDisplay(keyBindings[listeningBtn.dataset.action]);
+    listeningBtn = null;
+  }
+});
 </script>
 </body>
 </html>
