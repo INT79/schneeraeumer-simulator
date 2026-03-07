@@ -844,7 +844,7 @@ function initSnowRoads() {
       const wx = (i + 0.5) * CELL - half;
       const wz = (j + 0.5) * CELL - half;
       if (onAnyRoad(wx, wz)) {
-        snowGrid[i * GRID + j] = 0.0; // kein Schnee auf Fahrbahn
+        snowGrid[i * GRID + j] = 0.18; // leichte Schneedecke auf Fahrbahn
       }
     }
   }
@@ -1108,8 +1108,17 @@ function addLantern(px, pz) {
   scene.add(g);
   lanterns.push(g);
 }
-for (let z = -100; z <= 100; z += 25) { addLantern(-5.8, z); }
-for (let z = -87; z <= 100; z += 25)  { addLantern(5.8, z); }
+// Laternen: nur wenn nicht auf Straße
+function safeLantern(px, pz) { if (!onAnyRoad(px, pz)) addLantern(px, pz); }
+
+// Hauptstraße (Hermsdorfer Damm x=0): Laternen bei x=±5.8
+for (let z = -130; z <= 130; z += 25) { safeLantern(-5.8, z); safeLantern(5.8, z); }
+// Nebenstraßen x=±80: Laternen bei ±4.5m neben Straßenmitte
+for (let z = -130; z <= 130; z += 30) { safeLantern(-80-4.8, z); safeLantern(-80+4.8, z); safeLantern(80-4.8, z); safeLantern(80+4.8, z); }
+// OW-Straßen z=0: Laternen bei z=±5.8
+for (let x = -130; x <= 130; x += 25) { safeLantern(x, -5.8); safeLantern(x, 5.8); }
+// OW-Nebenstraßen z=±80
+for (let x = -130; x <= 130; x += 30) { safeLantern(x, -80-4.8); safeLantern(x, -80+4.8); safeLantern(x, 80-4.8); safeLantern(x, 80+4.8); }
 
 // --- Poller ---
 function addBollard(px, pz) {
@@ -1119,9 +1128,9 @@ function addBollard(px, pz) {
   g.position.set(px, 0, pz);
   scene.add(g);
 }
-for (let z = -100; z <= 100; z += 20) {
-  addBollard(-6.4, z);
-  addBollard(6.4, z);
+for (let z = -130; z <= 130; z += 20) {
+  if (!onAnyRoad(-6.4, z)) addBollard(-6.4, z);
+  if (!onAnyRoad( 6.4, z)) addBollard( 6.4, z);
 }
 
 // --- Stromkästen ---
@@ -1958,8 +1967,8 @@ function animate() {
     const ang = Math.acos(Math.min(1, bodyUp.dot(up)));
     if (ang > 0.08) {
       const torq = up.cross(bodyUp);
-      chassisCannonBody.torque.x += torq.x * 200;
-      chassisCannonBody.torque.z += torq.z * 200;
+      chassisCannonBody.torque.x += torq.x * 40; // reduziert: war 200 → kein Phantom-Crash
+      chassisCannonBody.torque.z += torq.z * 40;
     }
 
     // Sync mesh
