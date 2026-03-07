@@ -256,7 +256,7 @@ const scene = new THREE.Scene();
 scene.fog = new THREE.FogExp2(0xaabbcc, 0.006);
 
 const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 600);
-camera.position.set(0, 10, 18);
+camera.position.set(0, 8, -32); // direkt hinter Fahrzeug (z=-20, offset -12)
 camera.lookAt(0, 0, 0);
 
 window.addEventListener('resize', () => {
@@ -274,7 +274,7 @@ world.allowSleep = false;
 
 const matGround  = new CANNON.Material('gnd');
 const matVehicle = new CANNON.Material('veh');
-const contactGV  = new CANNON.ContactMaterial(matGround, matVehicle, { friction: 0.15, restitution: 0.05 });
+const contactGV  = new CANNON.ContactMaterial(matGround, matVehicle, { friction: 0.6, restitution: 0.02 });
 world.addContactMaterial(contactGV);
 
 // ---- Snow Grid ----
@@ -823,7 +823,7 @@ vGroup.add(headR);
 const chassisCannonBody = new CANNON.Body({ mass: 900, material: matVehicle });
 chassisCannonBody.addShape(new CANNON.Box(new CANNON.Vec3(0.75, 0.5, 1.5)));
 chassisCannonBody.position.set(0, 2.5, -20);
-chassisCannonBody.linearDamping  = 0.35;
+chassisCannonBody.linearDamping  = 0.20;
 chassisCannonBody.angularDamping = 0.65;
 world.addBody(chassisCannonBody);
 
@@ -839,7 +839,7 @@ const wOpts = {
   directionLocal:      new CANNON.Vec3(0, -1, 0),
   suspensionStiffness: 28,
   suspensionRestLength: 0.35,
-  frictionSlip:        1.3,
+  frictionSlip:        3.0,
   dampingRelaxation:   2.2,
   dampingCompression:  4.0,
   maxSuspensionForce:  100000,
@@ -885,7 +885,7 @@ chassisCannonBody.addEventListener('collide', (e) => {
 
 // Vehicle state
 let engineForce = 0, steeringVal = 0;
-const MAX_FORCE   = 2800;
+const MAX_FORCE   = 9000;
 const MAX_STEER   = 0.44;
 const MAX_BRAKE   = 90;
 
@@ -1337,8 +1337,8 @@ function animate() {
   if (!onFoot) {
     chassisCannonBody.wakeUp(); // verhindert Sleep-Problem
 
-    if (keys['KeyW'])     engineForce = Math.min(engineForce + 800*dt, MAX_FORCE);
-    else if (keys['KeyS']) engineForce = Math.max(engineForce - 800*dt, -MAX_FORCE*0.55);
+    if (keys['KeyW'])     engineForce = Math.min(engineForce + 3000*dt, MAX_FORCE);
+    else if (keys['KeyS']) engineForce = Math.max(engineForce - 3000*dt, -MAX_FORCE*0.45);
     else                   engineForce *= 0.85;
 
     if      (keys['KeyD']) steeringVal = Math.min(steeringVal + 2.5*dt, MAX_STEER);
