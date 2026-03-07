@@ -818,12 +818,40 @@ function addZebra(cx, cz, dir) {
 // csZ für Schilder und Minimap (O-W-Straßen bei z=-80,0,+80)
 const csZ = [-80, 0, 80];
 
-// Straßenbäume entlang der Hauptachsen (neben der Mittelspur, x=0 / z=0)
+// Straßenbäume: nur im Grünstreifen, nie auf Fahrbahn
+// NS-Straßen bei x=-80,0,+80 / OW-Straßen bei z=-80,0,+80
+const NS_ROADS = [{x:  0, hw: 7.0}, {x: -80, hw: 4.5}, {x: 80, hw: 4.5}];
+const OW_ROADS = [{z:  0, hw: 7.0}, {z: -80, hw: 4.5}, {z: 80, hw: 4.5}];
+
+function onAnyRoad(px, pz) {
+  // Auf einer N-S Straße?
+  for (const r of NS_ROADS) if (Math.abs(px - r.x) < r.hw + 0.5) return true;
+  // Auf einer O-W Straße?
+  for (const r of OW_ROADS) if (Math.abs(pz - r.z) < r.hw + 0.5) return true;
+  return false;
+}
+
+function safeTree(px, pz) {
+  if (!onAnyRoad(px, pz)) addTree(px, pz);
+}
+
+// Bäume im Grünstreifen der Hauptstraße (x=0): bei x=±8.5 (Grünstreifen ~7.6–8.8m vom Zentrum)
 for (let t = -130; t <= 130; t += 12) {
-  addTree(-9, t);
-  addTree( 9, t);
-  addTree(t, -9);
-  addTree(t,  9);
+  safeTree(-8.5, t);   // links der N-S-Hauptstraße
+  safeTree( 8.5, t);   // rechts
+  safeTree(t, -8.5);   // unterhalb der O-W-Hauptstraße
+  safeTree(t,  8.5);   // oberhalb
+}
+// Bäume an den Nebenstraßen (x=±80, Grünstreifen ~±5.5m vom Zentrum)
+for (let t = -130; t <= 130; t += 14) {
+  safeTree(-80 - 5.5, t);
+  safeTree(-80 + 5.5, t);
+  safeTree( 80 - 5.5, t);
+  safeTree( 80 + 5.5, t);
+  safeTree(t, -80 - 5.5);
+  safeTree(t, -80 + 5.5);
+  safeTree(t,  80 - 5.5);
+  safeTree(t,  80 + 5.5);
 }
 
 // ================================================================
@@ -978,9 +1006,10 @@ function addTree(px, pz) {
   g.position.set(px, 0, pz);
   scene.add(g);
 }
+// Hardcodierte Bäume – nur wenn nicht auf Straße
 [[-8,-92],[-8,-62],[-8,-30],[-8,28],[-8,64],[-8,90],
  [8,-80],[8,-48],[8,-12],[8,20],[8,56],[8,85],
- [-52,-60],[-52,22],[52,-42],[52,58]].forEach(([x,z]) => addTree(x,z));
+ [-52,-60],[-52,22],[52,-42],[52,58]].forEach(([x,z]) => safeTree(x,z));
 
 // --- Zäune ---
 function addFence(x1,z1,x2,z2,segs) {
