@@ -389,6 +389,22 @@ function playSpreaderSound() {
   osc.start(now); osc.stop(now + 0.09);
 }
 
+function playCrashSound() {
+  if (!audioCtx || !soundEnabled || document.visibilityState !== 'visible') return;
+  const now = audioCtx.currentTime;
+  const buf = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate * 0.25), audioCtx.sampleRate);
+  const dat = buf.getChannelData(0);
+  for (let i = 0; i < dat.length; i++) dat[i] = (Math.random()*2-1) * Math.pow(1 - i/dat.length, 1.5);
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf;
+  const g2 = audioCtx.createGain();
+  g2.gain.setValueAtTime(0.35, now);
+  g2.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+  src.connect(g2);
+  g2.connect(audioCtx.destination);
+  src.start(now);
+}
+
 document.addEventListener('keydown', () => initAudio(), { once: true });
 document.addEventListener('click',   () => initAudio(), { once: true });
 
@@ -831,8 +847,16 @@ function onAnyRoad(px, pz) {
   return false;
 }
 
+const treeColliders = [];
+function addTreeCollider(px, pz) {
+  const shape = new CANNON.Cylinder(0.22, 0.22, 3.0, 8);
+  const body = new CANNON.Body({ mass: 0, shape });
+  body.position.set(px, 1.5, pz);
+  world.addBody(body);
+  treeColliders.push(body);
+}
 function safeTree(px, pz) {
-  if (!onAnyRoad(px, pz)) addTree(px, pz);
+  if (!onAnyRoad(px, pz)) { addTree(px, pz); addTreeCollider(px, pz); }
 }
 
 // Schnee-Initialisierung: Straßenzellen fast leer (durchscheinend),
@@ -1111,7 +1135,13 @@ function addLantern(px, pz) {
 // Laternen im Grünstreifen (außerhalb der Fahrbahn)
 // Hauptstraße halfWidth=7m → Grünstreifen bei ~8.5m
 // Nebenstraße halfWidth=4.5m → Grünstreifen bei ~6.0m
-function safeLantern(px, pz) { if (!onAnyRoad(px, pz)) addLantern(px, pz); }
+function addLanternCollider(px, pz) {
+  const shape = new CANNON.Cylinder(0.05, 0.05, 5.5, 6);
+  const body = new CANNON.Body({ mass: 0, shape });
+  body.position.set(px, 2.75, pz);
+  world.addBody(body);
+}
+function safeLantern(px, pz) { if (!onAnyRoad(px, pz)) { addLantern(px, pz); addLanternCollider(px, pz); } }
 
 // N-S Hauptstraße (Hermsdorfer Damm, x=0): Laternen bei x=±8.5m
 for (let z = -130; z <= 130; z += 25) { safeLantern(-8.5, z); safeLantern(8.5, z); }
@@ -1457,10 +1487,11 @@ rayVehicle.addToWorld(world);
 
 // Kollisions-Event für Fahrzeug
 chassisCannonBody.addEventListener('collide', (e) => {
-  if (collisionFlash > 0.2) return; // kein Spam
+  const relVel = e.contact.getImpactVelocityAlongNormal();
+  if (Math.abs(relVel) < 1.0) return; // zu schwacher Kontakt → ignorieren
+  if (collisionFlash > 0.3) return;   // kein Spam
   const contact = e.contact;
-  const cp = contact.bi === chassisCannonBody ? contact.rj : contact.ri;
-  const wPos = e.contact.bi === chassisCannonBody
+  const wPos = contact.bi === chassisCannonBody
     ? new THREE.Vector3(
         chassisCannonBody.position.x + contact.rj.x,
         chassisCannonBody.position.y + contact.rj.y,
@@ -1469,7 +1500,12 @@ chassisCannonBody.addEventListener('collide', (e) => {
         chassisCannonBody.position.x + contact.ri.x,
         chassisCannonBody.position.y + contact.ri.y,
         chassisCannonBody.position.z + contact.ri.z);
-  collisionFlash = 0.5;
+  if (Math.abs(relVel) > 3.0) {
+    collisionFlash = 0.6;
+    playCrashSound();
+  } else {
+    collisionFlash = 0.2;
+  }
   const cnt = 5 + Math.floor(Math.random() * 4);
   for (let k = 0; k < cnt; k++) {
     spawnParticle(collisionPool, wPos.x, Math.max(0.3, wPos.y), wPos.z,
@@ -1503,6 +1539,74 @@ spawnNPC(-2, -15, 1,  0.048);
 spawnNPC( 2,  30, -1, 0.052);
 spawnNPC( 2,  72, -1, 0.045);
 spawnNPC(-2,  5,  1,  0.060);
+
+// ================================================================
+//  TRAFFIC CARS (fahrende Autos auf allen 6 Straßen)
+// ================================================================
+function randomColor() {
+  return [0xcc2222, 0x2244cc, 0x228833, 0xccaa22, 0x888888, 0xeeeeee, 0x993399][Math.floor(Math.random()*7)];
+}
+
+function spawnCar(startX, startZ, dir, lane, speed, color) {
+  const g = new THREE.Group();
+  // Karosserie
+  g.add(box(2.0, 0.7, 4.2, color,                   0, 0.55, 0));
+  g.add(box(1.7, 0.55, 2.2, Math.floor(color * 0.85), 0, 1.1,  0.2));
+  // Räder
+  [[-0.95,-0.02,1.3],[0.95,-0.02,1.3],[-0.95,-0.02,-1.3],[0.95,-0.02,-1.3]].forEach(([wx,wy,wz]) => {
+    g.add(cyl(0.32, 0.32, 0.22, 8, 0x222222, wx, wy, wz));
+  });
+  // Scheinwerfer
+  g.add(box(0.3, 0.18, 0.08, 0xffffcc, -0.65, 0.6,  2.1));
+  g.add(box(0.3, 0.18, 0.08, 0xffffcc,  0.65, 0.6,  2.1));
+  // Rücklichter
+  g.add(box(0.3, 0.18, 0.08, 0xff2200, -0.65, 0.6, -2.1));
+  g.add(box(0.3, 0.18, 0.08, 0xff2200,  0.65, 0.6, -2.1));
+  // Positionieren
+  g.position.set(startX, 0, startZ);
+  if (dir === 'OW')            g.rotation.y =  Math.PI / 2;
+  if (lane < 0 && dir === 'NS') g.rotation.y =  Math.PI;
+  if (lane < 0 && dir === 'OW') g.rotation.y = -Math.PI / 2;
+  scene.add(g);
+  // Physik-Body
+  const shape = new CANNON.Box(new CANNON.Vec3(1.0, 0.7, 2.1));
+  const body  = new CANNON.Body({ mass: 800, shape });
+  body.position.set(startX, 0.7, startZ);
+  body.linearDamping  = 0.99;
+  body.angularDamping = 1.0;
+  world.addBody(body);
+  return { mesh: g, body, dir, lane, speed, roadX: startX, roadZ: startZ };
+}
+
+const trafficCars = [];
+
+// N-S Hauptstraße (x=0): 6 Autos pro Richtung
+for (let i = 0; i < 6; i++) {
+  trafficCars.push(spawnCar(-3.5, -130 + i*40, 'NS', +1, 2.5 + Math.random(), randomColor()));
+  trafficCars.push(spawnCar( 3.5,  130 - i*40, 'NS', -1, 2.0 + Math.random(), randomColor()));
+}
+// N-S Nebenstraße x=-80
+for (let i = 0; i < 4; i++) {
+  trafficCars.push(spawnCar(-80-2.2, -100 + i*50, 'NS', +1, 1.8 + Math.random()*0.8, randomColor()));
+  trafficCars.push(spawnCar(-80+2.2,  100 - i*50, 'NS', -1, 1.5 + Math.random()*0.8, randomColor()));
+}
+// N-S Nebenstraße x=+80
+for (let i = 0; i < 4; i++) {
+  trafficCars.push(spawnCar(80-2.2, -100 + i*50, 'NS', +1, 1.8 + Math.random()*0.8, randomColor()));
+  trafficCars.push(spawnCar(80+2.2,  100 - i*50, 'NS', -1, 1.5 + Math.random()*0.8, randomColor()));
+}
+// O-W Hauptstraße (z=0): 6 Autos pro Richtung
+for (let i = 0; i < 6; i++) {
+  trafficCars.push(spawnCar(-130 + i*40, -3.5, 'OW', +1, 2.5 + Math.random(), randomColor()));
+  trafficCars.push(spawnCar( 130 - i*40,  3.5, 'OW', -1, 2.0 + Math.random(), randomColor()));
+}
+// O-W Nebenstraßen z=±80
+for (let i = 0; i < 4; i++) {
+  trafficCars.push(spawnCar(-100 + i*50, -80-2.2, 'OW', +1, 1.8+Math.random()*0.8, randomColor()));
+  trafficCars.push(spawnCar( 100 - i*50, -80+2.2, 'OW', -1, 1.5+Math.random()*0.8, randomColor()));
+  trafficCars.push(spawnCar(-100 + i*50,  80-2.2, 'OW', +1, 1.8+Math.random()*0.8, randomColor()));
+  trafficCars.push(spawnCar( 100 - i*50,  80+2.2, 'OW', -1, 1.5+Math.random()*0.8, randomColor()));
+}
 
 // ================================================================
 //  PEDESTRIANS
@@ -2116,6 +2220,28 @@ function animate() {
     n.mesh.rotation.y  = n.dir > 0 ? Math.PI : 0;
     if (n.mesh.position.z > n.maxZ) n.dir = -1;
     if (n.mesh.position.z < n.minZ) n.dir =  1;
+  });
+
+  // ---- Verkehr (Traffic Cars) ----
+  trafficCars.forEach(car => {
+    const spd = car.speed;
+    if (car.dir === 'NS') {
+      const d = car.lane > 0 ? 1 : -1;
+      car.body.position.z += spd * d * dt;
+      if (car.body.position.z >  155) car.body.position.z = -155;
+      if (car.body.position.z < -155) car.body.position.z =  155;
+      car.body.position.x = car.roadX;
+    } else {
+      const d = car.lane > 0 ? 1 : -1;
+      car.body.position.x += spd * d * dt;
+      if (car.body.position.x >  155) car.body.position.x = -155;
+      if (car.body.position.x < -155) car.body.position.x =  155;
+      car.body.position.z = car.roadZ;
+    }
+    car.body.velocity.set(0, 0, 0);
+    car.body.angularVelocity.set(0, 0, 0);
+    car.mesh.position.copy(car.body.position);
+    car.mesh.position.y = 0;
   });
 
   // ---- Pedestrians ----
