@@ -523,10 +523,11 @@ function cyl(rt, rb, h, seg, color, px, py, pz, rx = 0, rz = 0) {
 // ================================================================
 //  MAP — STRASSEN, GEHWEGE, MARKIERUNGEN
 // ================================================================
-const COL_ROAD = 0x4a4a52;   // Asphalt dunkelgrau-blau
-const COL_SIDE = 0xb0b0b0;
-const COL_SNOW = 0xe8eef4;
-const COL_GRASS = 0x3a6030;
+const COL_ROAD    = 0x3e3e42;   // Berliner Asphalt dunkelanthrazit
+const COL_SIDE    = 0xb0b0b0;
+const COL_SNOW    = 0xe8eef4;
+const COL_GRASS   = 0x5a5040;   // Berliner Grünstreifen: Erde/Wintergras
+const COL_GRASS2  = 0x4a6030;   // Sommergrün für Hintergrund
 
 function addPlane(w, d, color, px, py, pz) {
   const m = new THREE.Mesh(
@@ -546,7 +547,7 @@ function addPlane(w, d, color, px, py, pz) {
 const COL_FUSS = 0x8a8a82;  // Gehweg (hellgrau)
 
 // Gras-Unterboden (gesamte Karte)
-addPlane(600, 600, COL_GRASS, 0, 0.009, 0);
+addPlane(600, 600, COL_GRASS2, 0, 0.009, 0);
 
 function buildStreet(cx, cz, w, len, dir) {
   // dir: 'NS' = entlang Z-Achse, 'OW' = entlang X-Achse
@@ -570,12 +571,12 @@ function buildStreet(cx, cz, w, len, dir) {
   scene.add(line);
 }
 
-// Mehrfarbiger Querschnitt: Parkstreifen + Pflaster + Fußweg + Radweg + Grünstreifen
-const COL_PARK    = 0x7a7a70; // Parkstreifen hellgrau
-const COL_PFLAST  = 0x5a5248; // Kleinsteinpflaster dunkelbraun-grau
-const COL_GEHWEG  = 0x929288; // Betonplatten Fußweg hellgrau
-const COL_RADWEG  = 0x5a4848; // Radweg leicht rötlich
-const COL_GRUEN   = 0x3a6030; // Grünstreifen
+// Berliner Bürgersteig-Querschnitt (Referenzfotos Wedding/Mitte)
+const COL_PARK    = 0x7a7a6e; // Parkstreifen (abgenutzter Asphalt)
+const COL_PFLAST  = 0x5e5a52; // Kleinsteinpflaster Granit-Mix (0x8A8580 gedämpft)
+const COL_GEHWEG  = 0xa8a49c; // Gehweg Betonplatten beigegrau (Berliner Standard)
+const COL_RADWEG  = 0x7a6050; // Knochensteine rötlich-braun (0x8B6E5C gedämpft)
+const COL_GRUEN   = 0x5a5040; // Grünstreifen Erde/Wintergras
 
 // Hilfsfunktion: einzelnen Streifen neben der Straße
 function addStrip(cx, cz, w, len, dir, color, yOff) {
@@ -638,6 +639,48 @@ function buildFullSidewalk(cx, cz, halfW, len, dir, isMain, side) {
     const wz = z === 0 ? 14 : 9;
     const sz = Math.max(wx, wz) + 2;
     buildStreet(x, z, sz, sz, 'OW');
+  });
+});
+
+
+// ================================================================
+//  ZEBRASTREIFEN an allen 9 Kreuzungen
+// ================================================================
+function addZebra(cx, cz, dir) {
+  // dir: 'NS' = quer über N-S-Straße (Fußgänger überqueren O-W), 'OW' = umgekehrt
+  const stripeW = 0.55;   // Streifenbreite
+  const gap     = 0.55;   // Lücke
+  const count   = 7;      // Anzahl Streifen
+  const len     = 4.5;    // Breite der Furt
+  const mat = new THREE.MeshLambertMaterial({ color: 0xe0dcd2, emissive: new THREE.Color(0x222222), opacity: 1.0, transparent: false });
+  for (let i = 0; i < count; i++) {
+    const off = (i - (count-1)/2) * (stripeW + gap);
+    const m = new THREE.Mesh(
+      dir === 'NS'
+        ? new THREE.PlaneGeometry(stripeW, len)
+        : new THREE.PlaneGeometry(len, stripeW),
+      mat
+    );
+    m.rotation.x = -Math.PI / 2;
+    const px = dir === 'NS' ? cx + off : cx;
+    const pz = dir === 'NS' ? cz       : cz + off;
+    m.position.set(px, 0.016, pz);
+    scene.add(m);
+  }
+}
+
+// Zebrastreifen direkt an Kreuzungsrand
+[-80, 0, 80].forEach(x => {
+  [-80, 0, 80].forEach(z => {
+    const wx = x === 0 ? 14 : 9;
+    const wz = z === 0 ? 14 : 9;
+    const sz = Math.max(wx, wz) + 2; // Kreuzungsplatte
+    // Zebrastreifen auf N-S Straße (quer, 2.5m vom Kreuzungszentrum entfernt)
+    addZebra(x, z - sz/2 - 2.0, 'NS');  // Süd
+    addZebra(x, z + sz/2 + 2.0, 'NS');  // Nord
+    // Zebrastreifen auf O-W Straße
+    addZebra(x - sz/2 - 2.0, z, 'OW'); // West
+    addZebra(x + sz/2 + 2.0, z, 'OW'); // Ost
   });
 });
 
