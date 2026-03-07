@@ -812,7 +812,14 @@ function addSign(px, pz, type) {
   g.position.set(px, 0, pz);
   scene.add(g);
 }
-csZ.forEach(z => { addSign(-3.5, z+3, 'stop'); addSign(3.5, z-3, 'warn'); });
+// Schilder an den Kreuzungen des 3×3-Rasters
+[-80, 0, 80].forEach(z => {
+  [-80, 0, 80].forEach(x => {
+    const off = x === 0 ? 8 : 5.5;
+    addSign(x - off, z + 5, 'stop');
+    addSign(x + off, z - 5, 'warn');
+  });
+});
 
 // --- Mülleimer ---
 function addTrash(px, pz) {
@@ -1350,11 +1357,17 @@ function drawMinimap(px, pz) {
     }
   }
 
-  // Straßen
+  // Straßen — 3×3 Raster
   mc.fillStyle = '#444';
-  mc.fillRect(mx(-3.5), 0, 7*S, H);
+  // N-S Straßen (x = -80, 0, +80)
+  [-80, 0, 80].forEach(x => {
+    const w = x === 0 ? 14 : 9;
+    mc.fillRect(mx(x - w/2), 0, w*S, H);
+  });
+  // O-W Straßen (z = -80, 0, +80)
   csZ.forEach(z => {
-    mc.fillRect(0, mz(z-3), W, 6*S);
+    const w = z === 0 ? 14 : 9;
+    mc.fillRect(0, mz(z - w/2), W, w*S);
   });
 
   // Gebäude
