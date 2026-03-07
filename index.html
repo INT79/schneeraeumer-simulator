@@ -145,12 +145,51 @@ canvas#gameCanvas { display: block; position: fixed; top: 0; left: 0; }
 }
 .t-btn.active { background: rgba(128,150,200,0.6); }
 .t-btn.sm { width: 46px; height: 46px; font-size: 16px; }
-#t-dpad { display: grid; grid-template-columns: 58px 58px 58px; grid-template-rows: 58px 58px; gap: 4px; }
-/* Hochformat: kleinere Buttons damit Spielfläche bleibt */
+/* Virtueller Joystick */
+#joystick-zone {
+  width: 144px; height: 144px;
+  position: relative;
+  touch-action: none;
+  cursor: pointer;
+}
+#joystick-base {
+  width: 144px; height: 144px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.10);
+  border: 2.5px solid rgba(255,255,255,0.35);
+  position: relative;
+  box-shadow: 0 0 14px rgba(0,0,0,0.4);
+}
+/* Fadenkreuz */
+#joystick-base::before {
+  content: '';
+  position: absolute;
+  left: 50%; top: 15px; bottom: 15px;
+  width: 1px; background: rgba(255,255,255,0.18);
+  transform: translateX(-50%);
+}
+#joystick-base::after {
+  content: '';
+  position: absolute;
+  top: 50%; left: 15px; right: 15px;
+  height: 1px; background: rgba(255,255,255,0.18);
+  transform: translateY(-50%);
+}
+#joystick-knob {
+  width: 54px; height: 54px;
+  border-radius: 50%;
+  background: rgba(44,49,85,0.85);
+  border: 2.5px solid rgba(128,150,200,0.8);
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+  transition: background 0.1s;
+}
 @media (orientation: portrait) {
-  .t-btn { width: 48px; height: 48px; font-size: 18px; }
-  .t-btn.sm { width: 40px; height: 40px; font-size: 14px; }
-  #t-dpad { grid-template-columns: 48px 48px 48px; grid-template-rows: 48px 48px; }
+  #joystick-zone, #joystick-base { width: 124px; height: 124px; }
+  #joystick-knob { width: 46px; height: 46px; }
   #touch-controls { padding: 8px 8px 12px; }
 }
 #t-dpad .t-fwd { grid-column: 2; grid-row: 1; }
@@ -239,6 +278,9 @@ canvas#gameCanvas { display: block; position: fixed; top: 0; left: 0; }
 // ================================================================
 //  KEY BINDINGS (must be defined early – used in animate loop)
 // ================================================================
+// Virtueller Joystick (Mobile)
+const joystick = { x: 0, y: 0, active: false };
+
 const keyBindings = {
   forward:    'KeyW',
   backward:   'KeyS',
@@ -573,17 +615,51 @@ function buildStreet(cx, cz, w, len, dir) {
 
 // Berliner Bürgersteig-Querschnitt (Referenzfotos Wedding/Mitte)
 const COL_PARK    = 0x7a7a6e; // Parkstreifen (abgenutzter Asphalt)
-const COL_PFLAST  = 0x5e5a52; // Kleinsteinpflaster Granit-Mix (0x8A8580 gedämpft)
-const COL_GEHWEG  = 0xa8a49c; // Gehweg Betonplatten beigegrau (Berliner Standard)
-const COL_RADWEG  = 0x7a6050; // Knochensteine rötlich-braun (0x8B6E5C gedämpft)
-const COL_GRUEN   = 0x5a5040; // Grünstreifen Erde/Wintergras
+const COL_PFLAST  = 0x8A8580; // Kleinsteinpflaster Granit-Mix (Referenz Wedding/Mitte)
+const COL_GEHWEG  = 0xB0AAA2; // Gehweg Betonplatten beigegrau (Berliner Standard)
+const COL_RADWEG  = 0x8B6E5C; // Knochensteine rötlich-braun (Radweg Berlin)
+const COL_GRUEN   = 0x6B5E48; // Grünstreifen Erde/Wintergras
 
-// Hilfsfunktion: einzelnen Streifen neben der Straße
-function addStrip(cx, cz, w, len, dir, color, yOff) {
+// Betonplatten-Textur für Gehweg (Kanvas-Texture mit Fugenraster)
+function createConcreteTexture() {
+  const sz = 256;
+  const c = document.createElement('canvas');
+  c.width = c.height = sz;
+  const ctx = c.getContext('2d');
+  // Grundfarbe beigegrau
+  ctx.fillStyle = '#B0AAA2';
+  ctx.fillRect(0, 0, sz, sz);
+  // Leichte Variation für Betonplatten-Optik
+  ctx.fillStyle = '#A8A29A';
+  ctx.fillRect(4, 4, 60, 60);
+  ctx.fillRect(4, 132, 60, 60);
+  ctx.fillRect(132, 4, 60, 60);
+  ctx.fillRect(132, 132, 60, 60);
+  // Fugennetz (Plattentrennlinien)
+  ctx.strokeStyle = '#8E8880';
+  ctx.lineWidth = 3;
+  [0, 64, 128, 192, 256].forEach(v => {
+    ctx.beginPath(); ctx.moveTo(v, 0); ctx.lineTo(v, sz); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, v); ctx.lineTo(sz, v); ctx.stroke();
+  });
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(1.5, 40); // ~1m breite Platten × Straßenlänge
+  return t;
+}
+// Textur für jeden Gehweg klonen (damit repeat unabhängig gesetzt werden kann)
+function getConcreteTex() {
+  const t = createConcreteTexture();
+  return t;
+}
+
+// Hilfsfunktion: einzelnen Streifen neben der Straße (tex optional für Gehweg)
+function addStrip(cx, cz, w, len, dir, color, yOff, tex) {
   const geo = dir === 'NS'
     ? new THREE.PlaneGeometry(w, len)
     : new THREE.PlaneGeometry(len, w);
-  const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color }));
+  const matOpts = tex ? { map: tex } : { color };
+  const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial(matOpts));
   mesh.rotation.x = -Math.PI / 2;
   mesh.position.set(cx, 0.010 + yOff * 0.001, cz);
   mesh.receiveShadow = true;
@@ -592,25 +668,28 @@ function addStrip(cx, cz, w, len, dir, color, yOff) {
 
 // Vollständiger Bürgersteig-Querschnitt
 // side: +1 = rechts/oben, -1 = links/unten; cx/cz = Straßenmitte; halfW = halbe Straßenbreite
+// Layout (Referenzfotos Wedding/Mitte): Grünstreifen DIREKT an Fahrbahn, dann Pflaster, Gehweg, Radweg
 function buildFullSidewalk(cx, cz, halfW, len, dir, isMain, side) {
   const s = side; // +1 oder -1
   const layers = isMain ? [
-    { off: halfW + 1.0,  w: 2.0, col: COL_PARK   }, // Parkstreifen
-    { off: halfW + 2.5,  w: 1.0, col: COL_PFLAST  }, // Kleinsteinpflaster
-    { off: halfW + 3.5,  w: 2.0, col: COL_GEHWEG  }, // Fußweg
-    { off: halfW + 5.5,  w: 1.5, col: COL_RADWEG  }, // Radweg
-    { off: halfW + 7.0,  w: 1.2, col: COL_GRUEN   }, // Grünstreifen
+    { off: halfW + 0.6,  w: 1.2, col: COL_GRUEN,  tex: null          }, // Grünstreifen direkt an Fahrbahn!
+    { off: halfW + 1.8,  w: 1.0, col: COL_PARK,   tex: null          }, // Parkstreifen
+    { off: halfW + 2.8,  w: 0.9, col: COL_PFLAST, tex: null          }, // Kleinsteinpflaster
+    { off: halfW + 3.7,  w: 2.2, col: COL_GEHWEG, tex: getConcreteTex() }, // Fußweg (Betonplatten-Textur)
+    { off: halfW + 5.9,  w: 1.5, col: COL_RADWEG, tex: null          }, // Radweg
   ] : [
-    { off: halfW + 0.75, w: 1.5, col: COL_PARK   }, // Parkstreifen
-    { off: halfW + 2.25, w: 0.8, col: COL_PFLAST  }, // Kleinsteinpflaster
-    { off: halfW + 3.05, w: 1.5, col: COL_GEHWEG  }, // Fußweg
-    { off: halfW + 4.55, w: 0.8, col: COL_GRUEN   }, // Grünstreifen
+    { off: halfW + 0.5,  w: 0.9, col: COL_GRUEN,  tex: null          }, // Grünstreifen direkt an Fahrbahn!
+    { off: halfW + 1.4,  w: 0.8, col: COL_PFLAST, tex: null          }, // Kleinsteinpflaster
+    { off: halfW + 2.2,  w: 1.6, col: COL_GEHWEG, tex: getConcreteTex() }, // Fußweg (Betonplatten-Textur)
+    { off: halfW + 3.8,  w: 0.7, col: COL_RADWEG, tex: null          }, // Radweg (Nebenstraße)
   ];
   layers.forEach((l, i) => {
     const off = l.off * s;
     const px = dir === 'NS' ? cx + off : cx;
     const pz = dir === 'NS' ? cz       : cz + off;
-    addStrip(px, pz, dir === 'NS' ? l.w : len, dir === 'NS' ? len : l.w, dir, l.col, i);
+    const w2 = dir === 'NS' ? l.w : len;
+    const l2 = dir === 'NS' ? len : l.w;
+    addStrip(px, pz, w2, l2, dir, l.col, i, l.tex);
   });
 }
 
@@ -652,7 +731,7 @@ function addZebra(cx, cz, dir) {
   const gap     = 0.55;   // Lücke
   const count   = 7;      // Anzahl Streifen
   const len     = 4.5;    // Breite der Furt
-  const mat = new THREE.MeshLambertMaterial({ color: 0xe0dcd2, emissive: new THREE.Color(0x222222), opacity: 1.0, transparent: false });
+  const mat = new THREE.MeshLambertMaterial({ color: 0xf5f2eb, emissive: new THREE.Color(0x111111), emissiveIntensity: 0.15, opacity: 1.0, transparent: false });
   for (let i = 0; i < count; i++) {
     const off = (i - (count-1)/2) * (stripeW + gap);
     const m = new THREE.Mesh(
@@ -1616,13 +1695,22 @@ function animate() {
   if (!onFoot) {
     chassisCannonBody.wakeUp(); // verhindert Sleep-Problem
 
-    if (keys[keyBindings.forward])     engineForce = Math.min(engineForce + 1200*dt, MAX_FORCE);
-    else if (keys[keyBindings.backward]) engineForce = Math.max(engineForce - 1200*dt, -MAX_FORCE*0.45);
-    else                                  engineForce *= 0.85;
+    if (joystick.active) {
+      // Analoger Joystick
+      const jFwd = -joystick.y;
+      if (jFwd > 0.08)       engineForce = MAX_FORCE * Math.min(jFwd, 1.0);
+      else if (jFwd < -0.08) engineForce = -MAX_FORCE * 0.45 * Math.min(-jFwd, 1.0);
+      else                   engineForce *= 0.85;
+      steeringVal = joystick.x * MAX_STEER;
+    } else {
+      if (keys[keyBindings.forward])     engineForce = Math.min(engineForce + 1200*dt, MAX_FORCE);
+      else if (keys[keyBindings.backward]) engineForce = Math.max(engineForce - 1200*dt, -MAX_FORCE*0.45);
+      else                                  engineForce *= 0.85;
 
-    if      (keys[keyBindings.steerRight]) steeringVal = Math.min(steeringVal + 2.5*dt, MAX_STEER);
-    else if (keys[keyBindings.steerLeft])  steeringVal = Math.max(steeringVal - 2.5*dt, -MAX_STEER);
-    else                                   steeringVal *= 0.75;
+      if      (keys[keyBindings.steerRight]) steeringVal = Math.min(steeringVal + 2.5*dt, MAX_STEER);
+      else if (keys[keyBindings.steerLeft])  steeringVal = Math.max(steeringVal - 2.5*dt, -MAX_STEER);
+      else                                   steeringVal *= 0.75;
+    }
 
     const brake = keys[keyBindings.brake] ? MAX_BRAKE : (Math.abs(engineForce) < 10 ? 5 : 0);
 
@@ -1964,13 +2052,49 @@ document.querySelectorAll('.t-btn[data-toggle]').forEach(btn => {
   }, { passive: false });
 });
 
-// Landscape-Hinweis auf sehr kleinen Screens
-if (isMobile && window.innerHeight > window.innerWidth) {
-  const hint = document.createElement('div');
-  hint.style.cssText = 'position:fixed;top:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.7);color:#FFD600;padding:6px 14px;border-radius:8px;font-size:13px;z-index:200;';
-  hint.textContent = '📱 Querformat empfohlen';
-  document.body.appendChild(hint);
-  setTimeout(() => hint.remove(), 4000);
+// ---- Virtueller Joystick ----
+  const jZone = document.getElementById('joystick-zone');
+  const jKnob = document.getElementById('joystick-knob');
+  const JRADIUS = 45;
+
+  function updateJoystick(touch) {
+    const rect = jZone.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    let dx = touch.clientX - cx;
+    let dy = touch.clientY - cy;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist > JRADIUS) { dx = dx / dist * JRADIUS; dy = dy / dist * JRADIUS; }
+    joystick.x = dx / JRADIUS;
+    joystick.y = dy / JRADIUS;
+    joystick.active = true;
+    jKnob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+  }
+
+  function resetJoystick() {
+    joystick.x = 0; joystick.y = 0; joystick.active = false;
+    jKnob.style.transform = 'translate(-50%, -50%)';
+  }
+
+  if (jZone) {
+    jZone.addEventListener('touchstart', e => { e.preventDefault(); initAudio(); updateJoystick(e.touches[0]); }, { passive: false });
+    jZone.addEventListener('touchmove',  e => { e.preventDefault(); updateJoystick(e.touches[0]); }, { passive: false });
+    jZone.addEventListener('touchend',   e => { e.preventDefault(); resetJoystick(); }, { passive: false });
+    jZone.addEventListener('touchcancel',e => { e.preventDefault(); resetJoystick(); }, { passive: false });
+  }
+
+  // Wetter-Button Mobile
+  const weatherCycle = ['sunny','cloudy','light','heavy','night'];
+  let weatherIdx = 1;
+  const tWeather = document.getElementById('t-weather');
+  if (tWeather) {
+    tWeather.addEventListener('touchstart', e => {
+      e.preventDefault();
+      weatherIdx = (weatherIdx + 1) % weatherCycle.length;
+      const w = weatherCycle[weatherIdx];
+      applyWeather(w);
+      tWeather.textContent = weatherIcons[w] || '🌦️';
+    }, { passive: false });
   }
 }); // end window.load
 
@@ -1979,14 +2103,10 @@ if (isMobile && window.innerHeight > window.innerWidth) {
 <!-- Mobile Touch Controls -->
 <div id="touch-controls">
   <div id="touch-left">
-    <div id="t-dpad">
-      <div class="t-btn t-fwd" data-key="forward">▲</div>
-      <div class="t-btn t-left" data-key="steerRight">◀</div>
-      <div class="t-btn t-brake" data-key="brake">■</div>
-      <div class="t-btn t-right" data-key="steerLeft">▶</div>
-    </div>
-    <div style="margin-top:4px; display:flex; gap:4px;">
-      <div class="t-btn" data-key="backward" style="width:120px; font-size:14px;">▼ Rückwärts</div>
+    <div id="joystick-zone">
+      <div id="joystick-base">
+        <div id="joystick-knob"></div>
+      </div>
     </div>
   </div>
   <div id="touch-right" style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;">
