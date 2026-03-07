@@ -283,6 +283,14 @@ const MSIZE = 300;
 const CELL  = MSIZE / GRID;
 const snowGrid = new Float32Array(GRID * GRID).fill(1);
 
+// ---- Grit (Streugut) System ----
+const GRIT_MAX = 3.0;
+const gritGrid = new Float32Array(GRID * GRID).fill(0);
+const gritCvs = document.createElement('canvas');
+gritCvs.width = gritCvs.height = 512;
+const gritCtx = gritCvs.getContext('2d');
+const gritTex = new THREE.CanvasTexture(gritCvs);
+
 const snowCvs = document.createElement('canvas');
 snowCvs.width = snowCvs.height = 512;
 const snowCtx = snowCvs.getContext('2d');
@@ -307,6 +315,23 @@ function rebuildSnowTex() {
 }
 rebuildSnowTex();
 
+function rebuildGritTex() {
+  gritCtx.clearRect(0, 0, 512, 512);
+  const cw = 512 / GRID;
+  for (let i = 0; i < GRID; i++) {
+    for (let j = 0; j < GRID; j++) {
+      const v = gritGrid[i * GRID + j];
+      if (v > 0.05) {
+        const alpha = Math.min(1, v / GRIT_MAX * 0.8);
+        gritCtx.fillStyle = `rgba(180,140,60,${alpha.toFixed(2)})`;
+        gritCtx.fillRect(i * cw, j * cw, cw+1, cw+1);
+      }
+    }
+  }
+  gritTex.needsUpdate = true;
+}
+rebuildGritTex();
+
 // ---- Ground (Asphalt-Basis) ----
 const groundGeo = new THREE.PlaneGeometry(MSIZE, MSIZE);
 const groundMat = new THREE.MeshLambertMaterial({ color: 0x888888 });
@@ -330,6 +355,18 @@ const snowOverlay = new THREE.Mesh(snowOverlayGeo, snowOverlayMat);
 snowOverlay.rotation.x = -Math.PI / 2;
 snowOverlay.position.y = 0.08; // Über allen Straßenplatten (max y=0.055)
 scene.add(snowOverlay);
+
+// ---- Grit-Overlay (Streugut, liegt über Schnee) ----
+const gritOverlayGeo = new THREE.PlaneGeometry(MSIZE, MSIZE);
+const gritOverlayMat = new THREE.MeshLambertMaterial({
+  map: gritTex, transparent: true, opacity: 1.0,
+  depthWrite: false, polygonOffset: true,
+  polygonOffsetFactor: -2, polygonOffsetUnits: -2
+});
+const gritOverlay = new THREE.Mesh(gritOverlayGeo, gritOverlayMat);
+gritOverlay.rotation.x = -Math.PI / 2;
+gritOverlay.position.y = 0.09;
+scene.add(gritOverlay);
 
 const gBody = new CANNON.Body({ mass: 0, material: matGround });
 gBody.addShape(new CANNON.Plane());
@@ -1302,14 +1339,14 @@ function animate() {
     else if (keys['KeyS']) engineForce = Math.max(engineForce - 800*dt, -MAX_FORCE*0.55);
     else                   engineForce *= 0.85;
 
-    if      (keys['KeyA']) steeringVal = Math.min(steeringVal + 2.5*dt, MAX_STEER);
-    else if (keys['KeyD']) steeringVal = Math.max(steeringVal - 2.5*dt, -MAX_STEER);
+    if      (keys['KeyD']) steeringVal = Math.min(steeringVal + 2.5*dt, MAX_STEER);
+    else if (keys['KeyA']) steeringVal = Math.max(steeringVal - 2.5*dt, -MAX_STEER);
     else                   steeringVal *= 0.75;
 
     const brake = keys['Space'] ? MAX_BRAKE : (Math.abs(engineForce) < 10 ? 5 : 0);
 
-    rayVehicle.setSteeringValue(-steeringVal, 0);
-    rayVehicle.setSteeringValue(-steeringVal, 1);
+    rayVehicle.setSteeringValue(steeringVal, 0);
+    rayVehicle.setSteeringValue(steeringVal, 1);
     rayVehicle.applyEngineForce(-engineForce, 2);
     rayVehicle.applyEngineForce(-engineForce, 3);
     for (let i = 0; i < 4; i++) rayVehicle.setBrake(brake, i);
@@ -1337,12 +1374,11 @@ function animate() {
       updateBrushSound(brushOn && spd > 0.5);
     }
 
-    // Snow clearing
+    // Snow clearing — direkt unter dem Fahrzeug (schmale, präzise Spur)
     if (brushOn && spd > 0.3) {
-      const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(vGroup.quaternion);
-      const bx  = vGroup.position.x + fwd.x * 1.6;
-      const bz  = vGroup.position.z + fwd.z * 1.6;
-      if (clearSnowLine(bx, bz, 0.75, 0.15)) texDirty = true; // amount=0.15 pro Frame → braucht ~7 Überfahrten
+      const bx  = vGroup.position.x;
+      const bz  = vGroup.position.z;
+      if (clearSnowLine(bx, bz, 0.75, 0.08)) texDirty = true; // amount=0.08 pro Frame → braucht ~12 Überfahrten
       // brush particles
       if (Math.random() < 0.4) {
         spawnParticle(brushPool, bx + (Math.random()-0.5)*1.5, 0.3, bz + (Math.random()-0.5)*1.5,
@@ -1351,15 +1387,35 @@ function animate() {
       brushCyl.rotation.x += 10 * dt;
     }
 
-    // Spreader
-    if (spreaderOn && Math.random() < 0.5) {
-      playSpreaderSound();
-      const bk = chassisCannonBody.vectorToWorldFrame(new CANNON.Vec3(0, 0, -1));
-      spawnParticle(spreadPool,
-        chassisCannonBody.position.x + bk.x*1.8 + (Math.random()-0.5)*1.5,
-        0.5,
-        chassisCannonBody.position.z + bk.z*1.8 + (Math.random()-0.5)*1.5,
-        (Math.random()-0.5)*2, Math.random()*0.6+0.2, (Math.random()-0.5)*2, 1.2);
+    // Spreader — Partikel + gritGrid befüllen
+    if (spreaderOn && spd > 0.1) {
+      if (Math.random() < 0.5) {
+        playSpreaderSound();
+        const bk = chassisCannonBody.vectorToWorldFrame(new CANNON.Vec3(0, 0, -1));
+        spawnParticle(spreadPool,
+          chassisCannonBody.position.x + bk.x*1.8 + (Math.random()-0.5)*1.5,
+          0.5,
+          chassisCannonBody.position.z + bk.z*1.8 + (Math.random()-0.5)*1.5,
+          (Math.random()-0.5)*2, Math.random()*0.6+0.2, (Math.random()-0.5)*2, 1.2);
+      }
+      // Streugut in gritGrid eintragen
+      const bkDir = new THREE.Vector3(0, 0, -1).applyQuaternion(vGroup.quaternion);
+      const sx = vGroup.position.x + bkDir.x * 1.5;
+      const sz = vGroup.position.z + bkDir.z * 1.5;
+      const si = Math.floor((sx + MSIZE/2) / CELL);
+      const sj = Math.floor((sz + MSIZE/2) / CELL);
+      const sr = Math.ceil(1.0 / CELL);
+      let gritChanged = false;
+      for (let gi = si-sr; gi <= si+sr; gi++) {
+        for (let gj = sj-sr; gj <= sj+sr; gj++) {
+          if (gi < 0 || gi >= GRID || gj < 0 || gj >= GRID) continue;
+          if (Math.random() < 0.3) {
+            gritGrid[gi*GRID+gj] = Math.min(GRIT_MAX, gritGrid[gi*GRID+gj] + 0.05);
+            gritChanged = true;
+          }
+        }
+      }
+      if (gritChanged) { rebuildGritTex(); }
     }
 
     // Kamera folgt Fahrzeug in Fahrtrichtung
@@ -1406,8 +1462,8 @@ function animate() {
             fwdZ * (1 + Math.random() * 2) + (Math.random()-0.5),
             0.5);
         }
-        // Schnee graduell räumen
-        if (clearSnowLine(playerPed.position.x, playerPed.position.z, 0.25, 0.2)) texDirty = true;
+        // Schnee graduell räumen — sehr schmale Schaufelspur
+        if (clearSnowLine(playerPed.position.x, playerPed.position.z, 0.10, 0.25)) texDirty = true;
         if (shovelAnim <= 0) { playerPed.rotation.z = 0; }
       }
 
@@ -1472,6 +1528,10 @@ function animate() {
   if (snowRefill > 0) {
     for (let i = 0; i < snowGrid.length; i++) {
       if (snowGrid[i] < 1) { snowGrid[i] = Math.min(1, snowGrid[i] + snowRefill * dt * 0.05); texDirty = true; }
+    }
+    // Streugut wird vom Neuschnee langsam bedeckt
+    for (let i = 0; i < gritGrid.length; i++) {
+      if (gritGrid[i] > 0) gritGrid[i] = Math.max(0, gritGrid[i] - snowRefill * dt * 0.02);
     }
   }
 
