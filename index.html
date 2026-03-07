@@ -844,7 +844,7 @@ function initSnowRoads() {
       const wx = (i + 0.5) * CELL - half;
       const wz = (j + 0.5) * CELL - half;
       if (onAnyRoad(wx, wz)) {
-        snowGrid[i * GRID + j] = 0.06; // kaum Schnee auf Fahrbahn
+        snowGrid[i * GRID + j] = 0.0; // kein Schnee auf Fahrbahn
       }
     }
   }
