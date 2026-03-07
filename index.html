@@ -435,8 +435,7 @@ scene.add(streuerParticles);
 
 // ─── PLAYER ON FOOT (when exited vehicle) ─────────────────────────────────────
 const playerMesh = new THREE.Mesh(
-  new THREE.CapsuleGeometry ? new THREE.CapsuleGeometry(0.3, 1.0, 4, 8)
-    : new THREE.CylinderGeometry(0.3, 0.3, 1.6, 8),
+  new THREE.CylinderGeometry(0.3, 0.3, 1.6, 8),
   new THREE.MeshLambertMaterial({ color: 0x2255aa })
 );
 playerMesh.castShadow = true;
