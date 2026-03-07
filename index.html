@@ -669,68 +669,98 @@ function addStrip(cx, cz, w, len, dir, color, yOff, tex) {
 // Vollständiger Bürgersteig-Querschnitt
 // side: +1 = rechts/oben, -1 = links/unten; cx/cz = Straßenmitte; halfW = halbe Straßenbreite
 // Layout (Referenzfotos Wedding/Mitte): Grünstreifen DIREKT an Fahrbahn, dann Pflaster, Gehweg, Radweg
-// Bordstein (Granitbordstein, ~12cm hoch, 18cm breit)
-function addBordstein(cx, cz, len, dir, isMain) {
-  const h = 0.12;   // 12cm hoch (Berliner Hochbord)
-  const w = 0.16;   // 16cm breit
-  const col = 0xb0aba4; // Granit hellgrau
+// Bordstein (Granitbordstein, ~12cm hoch)
+function addBordstein(cx, cz, segLen, dir) {
+  const h = 0.12, w = 0.16;
   const geo = dir === 'NS'
-    ? new THREE.BoxGeometry(w, h, len)
-    : new THREE.BoxGeometry(len, h, w);
-  const mat = new THREE.MeshLambertMaterial({ color: col });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.position.set(cx, 0.011 + h/2, cz); // sitzt auf der Fahrbahn
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
+    ? new THREE.BoxGeometry(w, h, segLen)
+    : new THREE.BoxGeometry(segLen, h, w);
+  const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: 0xb0aba4 }));
+  mesh.position.set(cx, 0.011 + h/2, cz);
+  mesh.castShadow = true; mesh.receiveShadow = true;
   scene.add(mesh);
 }
 
-function buildFullSidewalk(cx, cz, halfW, len, dir, isMain, side) {
-  const s = side; // +1 oder -1
-  const layers = isMain ? [
-    { off: halfW + 0.6,  w: 1.2, col: COL_GRUEN,  tex: null          }, // Grünstreifen direkt an Fahrbahn!
-    { off: halfW + 1.8,  w: 1.0, col: COL_PARK,   tex: null          }, // Parkstreifen
-    { off: halfW + 2.8,  w: 0.9, col: COL_PFLAST, tex: null          }, // Kleinsteinpflaster
-    { off: halfW + 3.7,  w: 2.2, col: COL_GEHWEG, tex: getConcreteTex() }, // Fußweg (Betonplatten-Textur)
-    { off: halfW + 5.9,  w: 1.5, col: COL_RADWEG, tex: null          }, // Radweg
-  ] : [
-    { off: halfW + 0.5,  w: 0.9, col: COL_GRUEN,  tex: null          }, // Grünstreifen direkt an Fahrbahn!
-    { off: halfW + 1.4,  w: 0.8, col: COL_PFLAST, tex: null          }, // Kleinsteinpflaster
-    { off: halfW + 2.2,  w: 1.6, col: COL_GEHWEG, tex: getConcreteTex() }, // Fußweg (Betonplatten-Textur)
-    { off: halfW + 3.8,  w: 0.7, col: COL_RADWEG, tex: null          }, // Radweg (Nebenstraße)
-  ];
-  // Bordstein an der Fahrbahn-Kante (direkt am Straßenrand)
-  const bordsteinOff = (halfW + 0.08) * s; // 8cm außerhalb der Fahrbahn
-  const bx = dir === 'NS' ? cx + bordsteinOff : cx;
-  const bz = dir === 'NS' ? cz               : cz + bordsteinOff;
-  addBordstein(bx, bz, len, dir, isMain);
-
-  layers.forEach((l, i) => {
-    const off = l.off * s;
-    const px = dir === 'NS' ? cx + off : cx;
-    const pz = dir === 'NS' ? cz       : cz + off;
-    const w2 = dir === 'NS' ? l.w : len;
-    const l2 = dir === 'NS' ? len : l.w;
-    addStrip(px, pz, w2, l2, dir, l.col, i, l.tex);
-  });
+// Berechne Gehweg-Segmente entlang einer Straße (Lücken bei Kreuzungen)
+// crossings: [{pos, crossWidth}] – Querstraßen mit ihrer Breite
+// streetWidth: Breite der Hauptstraße
+function sidewalkSegments(streetWidth, crossings, totalHalf) {
+  const segs = [];
+  // Sortierte Übergänge: an jeder Kreuzung ausschneiden
+  const cuts = crossings.map(c => {
+    const gap = (Math.max(streetWidth, c.crossWidth) + 2) / 2 + 0.4;
+    return { from: c.pos - gap, to: c.pos + gap };
+  }).sort((a,b) => a.from - b.from);
+  let cur = -totalHalf;
+  for (const cut of cuts) {
+    if (cut.from > cur + 0.5) segs.push([cur, cut.from]);
+    cur = cut.to;
+  }
+  if (cur < totalHalf - 0.5) segs.push([cur, totalHalf]);
+  return segs;
 }
 
-// N-S Straßen (3 Stück)
+// Bürgersteig segmentweise (stoppt vor Kreuzungen)
+function buildFullSidewalk(cx, cz, halfW, segments, dir, isMain, side) {
+  const s = side;
+  const layers = isMain ? [
+    { off: halfW + 0.6,  w: 1.2, col: COL_GRUEN  },
+    { off: halfW + 1.8,  w: 1.0, col: COL_PARK   },
+    { off: halfW + 2.8,  w: 0.9, col: COL_PFLAST },
+    { off: halfW + 3.7,  w: 2.2, col: COL_GEHWEG, tex: getConcreteTex() },
+    { off: halfW + 5.9,  w: 1.5, col: COL_RADWEG },
+  ] : [
+    { off: halfW + 0.5,  w: 0.9, col: COL_GRUEN  },
+    { off: halfW + 1.4,  w: 0.8, col: COL_PFLAST },
+    { off: halfW + 2.2,  w: 1.6, col: COL_GEHWEG, tex: getConcreteTex() },
+    { off: halfW + 3.8,  w: 0.7, col: COL_RADWEG },
+  ];
+
+  for (const [segStart, segEnd] of segments) {
+    const segLen = segEnd - segStart;
+    const segMid = (segStart + segEnd) / 2;
+    // Bordstein
+    const bOff = (halfW + 0.08) * s;
+    const bx = dir === 'NS' ? cx + bOff : segMid;
+    const bz = dir === 'NS' ? segMid    : cz + bOff;
+    addBordstein(bx, bz, segLen, dir);
+    // Streifen
+    layers.forEach((l, i) => {
+      const lOff = l.off * s;
+      const px = dir === 'NS' ? cx + lOff : segMid;
+      const pz = dir === 'NS' ? segMid    : cz + lOff;
+      const w2 = dir === 'NS' ? l.w : segLen;
+      const l2 = dir === 'NS' ? segLen : l.w;
+      addStrip(px, pz, w2, l2, dir, l.col, i, l.tex || null);
+    });
+  }
+}
+
+// Straßen aufbauen mit korrekten Bürgersteig-Segmenten
+const STREET_W = { main: 14, side: 9 };
+const CROSS_POS = [-80, 0, 80];
+
+// N-S Straßen
 [-80, 0, 80].forEach(x => {
-  const w = x === 0 ? 14 : 9;
+  const w = x === 0 ? STREET_W.main : STREET_W.side;
   const isMain = x === 0;
   buildStreet(x, 0, w, 300, 'NS');
-  buildFullSidewalk(x, 0, w/2, 300, 'NS', isMain, +1);
-  buildFullSidewalk(x, 0, w/2, 300, 'NS', isMain, -1);
+  // Kreuzungen: O-W Straßen schneiden bei z=-80,0,+80 durch
+  const crosses = CROSS_POS.map(z => ({ pos: z, crossWidth: z === 0 ? STREET_W.main : STREET_W.side }));
+  const segs = sidewalkSegments(w, crosses, 150);
+  buildFullSidewalk(x, 0, w/2, segs, 'NS', isMain, +1);
+  buildFullSidewalk(x, 0, w/2, segs, 'NS', isMain, -1);
 });
 
-// O-W Straßen (3 Stück)
+// O-W Straßen
 [-80, 0, 80].forEach(z => {
-  const w = z === 0 ? 14 : 9;
+  const w = z === 0 ? STREET_W.main : STREET_W.side;
   const isMain = z === 0;
   buildStreet(0, z, w, 300, 'OW');
-  buildFullSidewalk(0, z, w/2, 300, 'OW', isMain, +1);
-  buildFullSidewalk(0, z, w/2, 300, 'OW', isMain, -1);
+  const crosses = CROSS_POS.map(x => ({ pos: x, crossWidth: x === 0 ? STREET_W.main : STREET_W.side }));
+  const segs = sidewalkSegments(w, crosses, 150);
+  buildFullSidewalk(0, z, w/2, segs, 'OW', isMain, +1);
+  buildFullSidewalk(0, z, w/2, segs, 'OW', isMain, -1);
 });
 
 // Kreuzungsplatten (Asphalt über die 9 Schnittpunkte)
