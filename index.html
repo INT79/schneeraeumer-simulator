@@ -407,13 +407,13 @@ let gritDirtyMin = [0, 0], gritDirtyMax = [GRID, GRID];
 
 function rebuildSnowTex() {
   const cw = 1024 / GRID;
-  snowCtx.fillStyle = 'rgba(60,60,65,0.95)';
-  snowCtx.fillRect(0, 0, 1024, 1024);
+  // Komplett transparent: geräumte Bereiche zeigen den echten Untergrund (Straße, Gehweg, Grünstreifen)
+  snowCtx.clearRect(0, 0, 1024, 1024);
   for (let i = 0; i < GRID; i++) {
     for (let j = 0; j < GRID; j++) {
       const v = snowGrid[i * GRID + j];
       if (v > 0.02) {
-        snowCtx.fillStyle = `rgba(240,245,255,${Math.min(1, v).toFixed(2)})`;
+        snowCtx.fillStyle = `rgba(232,238,244,${Math.min(1, v).toFixed(2)})`;
         snowCtx.fillRect(Math.floor(i * cw), Math.floor(j * cw), Math.ceil(cw)+1, Math.ceil(cw)+1);
       }
     }
@@ -570,31 +570,65 @@ function buildStreet(cx, cz, w, len, dir) {
   scene.add(line);
 }
 
-function buildSidewalk(cx, cz, w, len, dir) {
+// Mehrfarbiger Querschnitt: Parkstreifen + Pflaster + Fußweg + Radweg + Grünstreifen
+const COL_PARK    = 0x7a7a70; // Parkstreifen hellgrau
+const COL_PFLAST  = 0x5a5248; // Kleinsteinpflaster dunkelbraun-grau
+const COL_GEHWEG  = 0x929288; // Betonplatten Fußweg hellgrau
+const COL_RADWEG  = 0x5a4848; // Radweg leicht rötlich
+const COL_GRUEN   = 0x3a6030; // Grünstreifen
+
+// Hilfsfunktion: einzelnen Streifen neben der Straße
+function addStrip(cx, cz, w, len, dir, color, yOff) {
   const geo = dir === 'NS'
     ? new THREE.PlaneGeometry(w, len)
     : new THREE.PlaneGeometry(len, w);
-  const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: COL_FUSS }));
+  const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color }));
   mesh.rotation.x = -Math.PI / 2;
-  mesh.position.set(cx, 0.012, cz);
+  mesh.position.set(cx, 0.010 + yOff * 0.001, cz);
   mesh.receiveShadow = true;
   scene.add(mesh);
 }
 
-// N-S Straßen (3 Stück, entlang Z-Achse)
+// Vollständiger Bürgersteig-Querschnitt
+// side: +1 = rechts/oben, -1 = links/unten; cx/cz = Straßenmitte; halfW = halbe Straßenbreite
+function buildFullSidewalk(cx, cz, halfW, len, dir, isMain, side) {
+  const s = side; // +1 oder -1
+  const layers = isMain ? [
+    { off: halfW + 1.0,  w: 2.0, col: COL_PARK   }, // Parkstreifen
+    { off: halfW + 2.5,  w: 1.0, col: COL_PFLAST  }, // Kleinsteinpflaster
+    { off: halfW + 3.5,  w: 2.0, col: COL_GEHWEG  }, // Fußweg
+    { off: halfW + 5.5,  w: 1.5, col: COL_RADWEG  }, // Radweg
+    { off: halfW + 7.0,  w: 1.2, col: COL_GRUEN   }, // Grünstreifen
+  ] : [
+    { off: halfW + 0.75, w: 1.5, col: COL_PARK   }, // Parkstreifen
+    { off: halfW + 2.25, w: 0.8, col: COL_PFLAST  }, // Kleinsteinpflaster
+    { off: halfW + 3.05, w: 1.5, col: COL_GEHWEG  }, // Fußweg
+    { off: halfW + 4.55, w: 0.8, col: COL_GRUEN   }, // Grünstreifen
+  ];
+  layers.forEach((l, i) => {
+    const off = l.off * s;
+    const px = dir === 'NS' ? cx + off : cx;
+    const pz = dir === 'NS' ? cz       : cz + off;
+    addStrip(px, pz, dir === 'NS' ? l.w : len, dir === 'NS' ? len : l.w, dir, l.col, i);
+  });
+}
+
+// N-S Straßen (3 Stück)
 [-80, 0, 80].forEach(x => {
   const w = x === 0 ? 14 : 9;
+  const isMain = x === 0;
   buildStreet(x, 0, w, 300, 'NS');
-  buildSidewalk(x - w/2 - 2, 0, 2.5, 300, 'NS');
-  buildSidewalk(x + w/2 + 2, 0, 2.5, 300, 'NS');
+  buildFullSidewalk(x, 0, w/2, 300, 'NS', isMain, +1);
+  buildFullSidewalk(x, 0, w/2, 300, 'NS', isMain, -1);
 });
 
-// O-W Straßen (3 Stück, entlang X-Achse)
+// O-W Straßen (3 Stück)
 [-80, 0, 80].forEach(z => {
   const w = z === 0 ? 14 : 9;
+  const isMain = z === 0;
   buildStreet(0, z, w, 300, 'OW');
-  buildSidewalk(0, z - w/2 - 2, 2.5, 300, 'OW');
-  buildSidewalk(0, z + w/2 + 2, 2.5, 300, 'OW');
+  buildFullSidewalk(0, z, w/2, 300, 'OW', isMain, +1);
+  buildFullSidewalk(0, z, w/2, 300, 'OW', isMain, -1);
 });
 
 // Kreuzungsplatten (Asphalt über die 9 Schnittpunkte)
