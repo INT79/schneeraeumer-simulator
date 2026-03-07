@@ -835,6 +835,24 @@ function safeTree(px, pz) {
   if (!onAnyRoad(px, pz)) addTree(px, pz);
 }
 
+// Schnee-Initialisierung: Straßenzellen fast leer (durchscheinend),
+// alle anderen Flächen voll mit Schnee → Orientierung von Anfang an
+function initSnowRoads() {
+  const half = MSIZE / 2;
+  for (let i = 0; i < GRID; i++) {
+    for (let j = 0; j < GRID; j++) {
+      const wx = (i + 0.5) * CELL - half;
+      const wz = (j + 0.5) * CELL - half;
+      if (onAnyRoad(wx, wz)) {
+        snowGrid[i * GRID + j] = 0.06; // kaum Schnee auf Fahrbahn
+      }
+    }
+  }
+  rebuildSnowTex();
+}
+// Sofort aufrufen (nach DOM-Aufbau, Straßen sind bereits definiert)
+initSnowRoads();
+
 // Bäume im Grünstreifen der Hauptstraße (x=0): bei x=±8.5 (Grünstreifen ~7.6–8.8m vom Zentrum)
 for (let t = -130; t <= 130; t += 12) {
   safeTree(-8.5, t);   // links der N-S-Hauptstraße
@@ -937,6 +955,69 @@ const BLDGS = [
   [ 40,  30,  8, 10,  6, 2, false], [ 30,  60,  8, 10,  8, 3, true],
 ];
 BLDGS.forEach(b => addBuilding(...b));
+
+// ================================================================
+//  OUTER BLOCKS: Buildings, Trees
+// ================================================================
+
+// Gebäude-Kollisionsprüfung: Keine Gebäude auf Straßen
+function safeBuildingCheck(cx, cz, w, d) {
+  const pts = [[cx,cz],[cx+w/2,cz+d/2],[cx-w/2,cz+d/2],[cx+w/2,cz-d/2],[cx-w/2,cz-d/2]];
+  return !pts.some(([x,z]) => onAnyRoad(x,z));
+}
+
+const OUTER_BLDGS = [
+  // --- Westrand (x < -80) ---
+  [-108, -50,  9, 11,  7, 0, true],  [-120, -38,  7,  9,  5, 1, false],
+  [-115, -60,  8, 10,  6, 2, true],  [-105, -25,  9, 11,  8, 3, false],
+  [-118, -10,  7,  9,  5, 4, true],  [-110, -70,  8, 10,  6, 0, false],
+  [-108,  10,  9, 11,  7, 1, true],  [-120,  25,  7,  9,  5, 2, false],
+  [-115,  40,  8, 10,  6, 3, true],  [-105,  55,  9, 11,  8, 4, false],
+  [-118,  68,  7,  9,  5, 0, true],  [-110, -82,  8, 10,  6, 1, false],
+  [-112,-100,  9, 11,  7, 2, false], [-122,-115,  7,  9,  5, 3, true],
+  [-108, 100,  9, 11,  7, 4, false], [-120, 115,  7,  9,  5, 0, true],
+
+  // --- Ostrand (x > +80) ---
+  [ 108, -50,  9, 11,  7, 1, true],  [ 120, -38,  7,  9,  5, 2, false],
+  [ 115, -60,  8, 10,  6, 3, true],  [ 105, -25,  9, 11,  8, 4, false],
+  [ 118, -10,  7,  9,  5, 0, true],  [ 110, -70,  8, 10,  6, 1, false],
+  [ 108,  10,  9, 11,  7, 2, true],  [ 120,  25,  7,  9,  5, 3, false],
+  [ 115,  40,  8, 10,  6, 4, true],  [ 105,  55,  9, 11,  8, 0, false],
+  [ 118,  68,  7,  9,  5, 1, true],  [ 110, -82,  8, 10,  6, 2, false],
+  [ 112,-100,  9, 11,  7, 3, false], [ 122,-115,  7,  9,  5, 4, true],
+  [ 108, 100,  9, 11,  7, 0, false], [ 120, 115,  7,  9,  5, 1, true],
+
+  // --- Südrand (z < -80) ---
+  [-50, -108, 11,  9,  7, 2, true],  [-38, -120,  9,  7,  5, 3, false],
+  [-60, -115, 10,  8,  6, 4, true],  [-25, -105, 11,  9,  8, 0, false],
+  [-10, -118,  9,  7,  5, 1, true],  [-70, -110, 10,  8,  6, 2, false],
+  [ 10, -108, 11,  9,  7, 3, true],  [ 25, -120,  9,  7,  5, 4, false],
+  [ 40, -115, 10,  8,  6, 0, true],  [ 55, -105, 11,  9,  8, 1, false],
+  [ 68, -118,  9,  7,  5, 2, true],  [-82, -110, 10,  8,  6, 3, false],
+  [-100,-112, 11,  9,  7, 4, false], [-115,-122,  9,  7,  5, 0, true],
+  [ 100,-108, 11,  9,  7, 1, false], [ 115,-120,  9,  7,  5, 2, true],
+
+  // --- Nordrand (z > +80) ---
+  [-50,  108, 11,  9,  7, 3, true],  [-38,  120,  9,  7,  5, 4, false],
+  [-60,  115, 10,  8,  6, 0, true],  [-25,  105, 11,  9,  8, 1, false],
+  [-10,  118,  9,  7,  5, 2, true],  [-70,  110, 10,  8,  6, 3, false],
+  [ 10,  108, 11,  9,  7, 4, true],  [ 25,  120,  9,  7,  5, 0, false],
+  [ 40,  115, 10,  8,  6, 1, true],  [ 55,  105, 11,  9,  8, 2, false],
+  [ 68,  118,  9,  7,  5, 3, true],  [-82,  110, 10,  8,  6, 4, false],
+  [-100, 112, 11,  9,  7, 0, false], [-115, 122,  9,  7,  5, 1, true],
+  [ 100, 108, 11,  9,  7, 2, false], [ 115, 120,  9,  7,  5, 3, true],
+];
+OUTER_BLDGS.forEach(b => {
+  if (safeBuildingCheck(b[0], b[1], b[2], b[3])) addBuilding(...b);
+});
+
+// Bäume in den Außenbereichen entlang der Nebenstraßen
+for (let t = -130; t <= 130; t += 14) {
+  safeTree(-80 - 12, t);  safeTree(-80 + 12, t);
+  safeTree( 80 - 12, t);  safeTree( 80 + 12, t);
+  safeTree(t, -80 - 12);  safeTree(t, -80 + 12);
+  safeTree(t,  80 - 12);  safeTree(t,  80 + 12);
+}
 
 // ================================================================
 //  STATIC OBJECTS
