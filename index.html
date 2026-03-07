@@ -2047,29 +2047,36 @@ function animate() {
     // Kamera folgt Fahrzeug - Offset in lokalem Fahrzeug-Koordinatensystem
     const camOffset = new THREE.Vector3(0, 6, -12); // 12m hinter, 6m oben
     camOffset.applyQuaternion(vGroup.quaternion);
-    const targetCamPos = vGroup.position.clone().add(camOffset);
-    camera.position.lerp(targetCamPos, 0.18); // schnelleres Folgen
-    const lookTarget = vGroup.position.clone().add(new THREE.Vector3(0, 1.5, 0));
+    // Kamera folgt im Fuß-Modus dem Spieler, sonst dem Fahrzeug
+    const camTarget = (onFoot && playerPed) ? playerPed.position : vGroup.position;
+    const targetCamPos = camTarget.clone().add(camOffset);
+    camera.position.lerp(targetCamPos, 0.18);
+    const lookTarget = camTarget.clone().add(new THREE.Vector3(0, 1.5, 0));
     camera.lookAt(lookTarget);
 
   } else {
     // Pedestrian mode
     if (playerPed) {
       const spd = 0.055;
-      if (keys[keyBindings.forward]) {
+      // Joystick-Unterstützung für Mobile
+      const goFwd   = keys[keyBindings.forward]     || (joystick.active && joystick.y < -0.2);
+      const goBwd   = keys[keyBindings.backward]    || (joystick.active && joystick.y >  0.2);
+      const goRight = keys[keyBindings.steerRight]  || (joystick.active && joystick.x >  0.2);
+      const goLeft  = keys[keyBindings.steerLeft]   || (joystick.active && joystick.x < -0.2);
+      if (goFwd) {
         const fwd = new THREE.Vector3(
           -Math.sin(playerPed.rotation.y), 0, -Math.cos(playerPed.rotation.y)
         );
         playerPed.position.addScaledVector(fwd, spd);
       }
-      if (keys[keyBindings.backward]) {
+      if (goBwd) {
         const bk = new THREE.Vector3(
           Math.sin(playerPed.rotation.y), 0, Math.cos(playerPed.rotation.y)
         );
         playerPed.position.addScaledVector(bk, spd);
       }
-      if (keys[keyBindings.steerRight]) playerPed.rotation.y += 0.04;
-      if (keys[keyBindings.steerLeft])  playerPed.rotation.y -= 0.04;
+      if (goRight) playerPed.rotation.y -= 0.04; // Drehung korrigiert
+      if (goLeft)  playerPed.rotation.y += 0.04;
 
       // Schaufel-Animation
       if (shovelAnim > 0) {
