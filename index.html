@@ -1108,17 +1108,25 @@ function addLantern(px, pz) {
   scene.add(g);
   lanterns.push(g);
 }
-// Laternen: nur wenn nicht auf Straße
+// Laternen im Grünstreifen (außerhalb der Fahrbahn)
+// Hauptstraße halfWidth=7m → Grünstreifen bei ~8.5m
+// Nebenstraße halfWidth=4.5m → Grünstreifen bei ~6.0m
 function safeLantern(px, pz) { if (!onAnyRoad(px, pz)) addLantern(px, pz); }
 
-// Hauptstraße (Hermsdorfer Damm x=0): Laternen bei x=±5.8
-for (let z = -130; z <= 130; z += 25) { safeLantern(-5.8, z); safeLantern(5.8, z); }
-// Nebenstraßen x=±80: Laternen bei ±4.5m neben Straßenmitte
-for (let z = -130; z <= 130; z += 30) { safeLantern(-80-4.8, z); safeLantern(-80+4.8, z); safeLantern(80-4.8, z); safeLantern(80+4.8, z); }
-// OW-Straßen z=0: Laternen bei z=±5.8
-for (let x = -130; x <= 130; x += 25) { safeLantern(x, -5.8); safeLantern(x, 5.8); }
-// OW-Nebenstraßen z=±80
-for (let x = -130; x <= 130; x += 30) { safeLantern(x, -80-4.8); safeLantern(x, -80+4.8); safeLantern(x, 80-4.8); safeLantern(x, 80+4.8); }
+// N-S Hauptstraße (Hermsdorfer Damm, x=0): Laternen bei x=±8.5m
+for (let z = -130; z <= 130; z += 25) { safeLantern(-8.5, z); safeLantern(8.5, z); }
+// N-S Nebenstraßen (x=±80): Laternen bei ±6m vom Straßenzentrum
+for (let z = -130; z <= 130; z += 28) {
+  safeLantern(-80 - 6.0, z); safeLantern(-80 + 6.0, z);
+  safeLantern( 80 - 6.0, z); safeLantern( 80 + 6.0, z);
+}
+// O-W Hauptstraße (Waidmannsluster Damm, z=0): Laternen bei z=±8.5m
+for (let x = -130; x <= 130; x += 25) { safeLantern(x, -8.5); safeLantern(x, 8.5); }
+// O-W Nebenstraßen (z=±80): Laternen bei ±6m vom Straßenzentrum
+for (let x = -130; x <= 130; x += 28) {
+  safeLantern(x, -80 - 6.0); safeLantern(x, -80 + 6.0);
+  safeLantern(x,  80 - 6.0); safeLantern(x,  80 + 6.0);
+}
 
 // --- Poller ---
 function addBollard(px, pz) {
