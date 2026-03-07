@@ -879,63 +879,81 @@ wsMesh.position.set(0, 1.45, 1.15); wsMesh.rotation.x = -0.18;
 vGroup.add(wsMesh);
 
 // Logo on cabin
-// IM NORDEN Schriftzug auf Front (weiß auf dunkelblau)
+// IM NORDEN Schriftzug — Heck + Seiten (wie echter Betriebswagen)
+// Heck-Canvas: breiter, weißer Text auf dunkelblau
 const logoCvs = document.createElement('canvas');
-logoCvs.width = 512; logoCvs.height = 128;
+logoCvs.width = 512; logoCvs.height = 96;
 const logoCtx = logoCvs.getContext('2d');
 logoCtx.fillStyle = '#2c3155';
-logoCtx.fillRect(0,0,512,128);
+logoCtx.fillRect(0,0,512,96);
 logoCtx.fillStyle = '#ffffff';
-logoCtx.font = 'bold 52px Arial';
+logoCtx.font = 'bold 56px Arial Narrow, Arial';
 logoCtx.textAlign = 'center';
 logoCtx.textBaseline = 'middle';
-logoCtx.fillText('IM NORDEN', 256, 64);
-const logoTex = new THREE.CanvasTexture(logoCvs);
+logoCtx.fillText('IM NORDEN', 256, 48);
+const logoTexRear = new THREE.CanvasTexture(logoCvs);
 
-// Front-Schriftzug (auf Chassis vorne)
-const logoFront = new THREE.Mesh(
-  new THREE.BoxGeometry(1.4, 0.32, 0.02),
-  new THREE.MeshLambertMaterial({ map: logoTex })
-);
-logoFront.position.set(0, 0.85, 1.51);
-vGroup.add(logoFront);
+// Seiten-Canvas: schmal, kleinerer Text
+const sideCvs = document.createElement('canvas');
+sideCvs.width = 512; sideCvs.height = 96;
+const sideCtx = sideCvs.getContext('2d');
+sideCtx.fillStyle = '#2c3155';
+sideCtx.fillRect(0,0,512,96);
+sideCtx.fillStyle = '#ffffff';
+sideCtx.font = 'bold 48px Arial Narrow, Arial';
+sideCtx.textAlign = 'center';
+sideCtx.textBaseline = 'middle';
+sideCtx.fillText('IM NORDEN', 256, 48);
+const logoTexSide = new THREE.CanvasTexture(sideCvs);
 
-// Heck-Schriftzug (auf Chassis hinten - zur Kamera hin sichtbar)
-const logoRear = new THREE.Mesh(
-  new THREE.BoxGeometry(1.4, 0.32, 0.02),
-  new THREE.MeshLambertMaterial({ map: logoTex })
+// Decal-Hilfsfunktion: flache Box direkt auf Oberfläche
+const mkDecal = (tex, w, h, d=0.015) => new THREE.Mesh(
+  new THREE.BoxGeometry(w, h, d),
+  new THREE.MeshLambertMaterial({
+    map: tex,
+    polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1
+  })
 );
-logoRear.position.set(0, 0.85, -1.51);
-logoRear.rotation.y = Math.PI;
+
+// Heck-Schriftzug
+const logoRear = mkDecal(logoTexRear, 1.35, 0.22);
+logoRear.position.set(0, 0.72, -1.508);
 vGroup.add(logoRear);
 
-// Seiten-Schriftzug links
-const logoLeft = new THREE.Mesh(
-  new THREE.BoxGeometry(0.02, 0.28, 2.2),
-  new THREE.MeshLambertMaterial({ map: logoTex })
-);
-logoLeft.position.set(-0.76, 0.85, 0);
-logoLeft.rotation.y = -Math.PI/2;
+// Front-Schriftzug (unter Windschutzscheibe)
+const logoFront = mkDecal(logoTexRear, 1.35, 0.22);
+logoFront.position.set(0, 0.72, 1.508);
+logoFront.rotation.y = Math.PI;
+vGroup.add(logoFront);
+
+// Seiten-Schriftzüge
+const logoLeft = mkDecal(logoTexSide, 2.0, 0.22);
+logoLeft.position.set(-0.758, 0.72, 0);
+logoLeft.rotation.y = -Math.PI / 2; // normal zeigt nach -X (außen links)
 vGroup.add(logoLeft);
 
-// Seiten-Schriftzug rechts
-const logoRight = new THREE.Mesh(
-  new THREE.BoxGeometry(0.02, 0.28, 2.2),
-  new THREE.MeshLambertMaterial({ map: logoTex })
-);
-logoRight.position.set(0.76, 0.85, 0);
-logoRight.rotation.y = Math.PI/2;
+const logoRight = mkDecal(logoTexSide, 2.0, 0.22);
+logoRight.position.set(0.758, 0.72, 0);
+logoRight.rotation.y = Math.PI / 2; // normal zeigt nach +X (außen rechts)
 vGroup.add(logoRight);
 
-// Beacon
+// Beacon (Warnblinkleuchte)
 const beaconG = new THREE.Group();
-beaconG.add(cyl(0.1, 0.1, 0.14, 8, 0x444444, 0, 0, 0));
-const beaconDome = new THREE.Mesh(
-  new THREE.CylinderGeometry(0.14, 0.05, 0.18, 8),
-  new THREE.MeshLambertMaterial({ color: 0xFF6600, emissive: new THREE.Color(0xFF2200), emissiveIntensity: 0.5 })
-);
-beaconDome.position.set(0, 0.17, 0);
+beaconG.add(cyl(0.1, 0.1, 0.14, 8, 0x333333, 0, 0, 0));
+const beaconMat = new THREE.MeshLambertMaterial({
+  color: 0xFF6600,
+  emissive: new THREE.Color(0xFF4400),
+  emissiveIntensity: 2.5
+});
+const beaconDome = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.06, 0.22, 10), beaconMat);
+beaconDome.position.set(0, 0.18, 0);
 beaconG.add(beaconDome);
+// Punktlicht direkt an der Leuchte
+const beaconLight = new THREE.PointLight(0xFF6600, 3.0, 12);
+beaconLight.position.set(0, 0.22, 0);
+beaconG.add(beaconLight);
+beaconG.userData.beaconLight = beaconLight;
+beaconG.userData.beaconMat = beaconMat;
 beaconG.position.set(0, 2.32, 0.15);
 vGroup.add(beaconG);
 
@@ -1524,6 +1542,13 @@ function animate() {
     // Sync mesh
     vGroup.position.copy(chassisCannonBody.position);
     vGroup.quaternion.copy(chassisCannonBody.quaternion);
+
+    // Beacon pulsiert (2 Hz Blinkfrequenz, wie echte Warnleuchte)
+    const beaconPulse = Math.sin(performance.now() * 0.0126) > 0; // ~2 Hz
+    const bl = beaconG.userData.beaconLight;
+    const bm = beaconG.userData.beaconMat;
+    if (bl) bl.intensity = beaconPulse ? 5.0 : 0.0;
+    if (bm) bm.emissiveIntensity = beaconPulse ? 4.0 : 0.3;
 
     // Speed
     const v = chassisCannonBody.velocity;
