@@ -413,7 +413,7 @@ const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('game
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = THREE.BasicShadowMap; // Mobile: weniger Aufwand
 
 const scene = new THREE.Scene();
 scene.fog = new THREE.FogExp2(0xaabbcc, 0.006);
@@ -441,9 +441,9 @@ const contactGV  = new CANNON.ContactMaterial(matGround, matVehicle, { friction:
 world.addContactMaterial(contactGV);
 
 // ---- Snow Grid ----
-const GRID  = 200;
+const GRID  = 120;
 const MSIZE = 300;
-const CELL  = MSIZE / GRID;  // = 1.5m pro Zelle → realistische Räumspur
+const CELL  = MSIZE / GRID;  // = 2.5m pro Zelle (Mobile-Optimierung)
 const snowGrid = new Float32Array(GRID * GRID).fill(1);
 
 // ---- Grit (Streugut) System ----
@@ -455,7 +455,7 @@ const gritCtx = gritCvs.getContext('2d');
 const gritTex = new THREE.CanvasTexture(gritCvs);
 
 const snowCvs = document.createElement('canvas');
-snowCvs.width = snowCvs.height = 1024;
+snowCvs.width = snowCvs.height = 512;
 const snowCtx = snowCvs.getContext('2d');
 const snowTex = new THREE.CanvasTexture(snowCvs);
 
@@ -545,7 +545,7 @@ scene.add(ambLight);
 const sunLight = new THREE.DirectionalLight(0xfff4e0, 1.0);
 sunLight.position.set(60, 90, 40);
 sunLight.castShadow = true;
-sunLight.shadow.mapSize.set(2048, 2048);
+sunLight.shadow.mapSize.set(512, 512); // Mobile-Optimierung
 sunLight.shadow.camera.near   = 1;
 sunLight.shadow.camera.far    = 400;
 sunLight.shadow.camera.left   = -160;
@@ -856,7 +856,7 @@ function addTreeCollider(px, pz) {
   treeColliders.push(body);
 }
 function safeTree(px, pz) {
-  if (!onAnyRoad(px, pz)) { addTree(px, pz); addTreeCollider(px, pz); }
+  if (!onAnyRoad(px, pz)) { addTree(px, pz); /* kein Cannon-Collider: Abstandscheck im Spielcode */ }
 }
 
 // Schnee-Initialisierung: Straßenzellen fast leer (durchscheinend),
@@ -1141,7 +1141,7 @@ function addLanternCollider(px, pz) {
   body.position.set(px, 2.75, pz);
   world.addBody(body);
 }
-function safeLantern(px, pz) { if (!onAnyRoad(px, pz)) { addLantern(px, pz); addLanternCollider(px, pz); } }
+function safeLantern(px, pz) { if (!onAnyRoad(px, pz)) { addLantern(px, pz); } }
 
 // N-S Hauptstraße (Hermsdorfer Damm, x=0): Laternen bei x=±8.5m
 for (let z = -130; z <= 130; z += 25) { safeLantern(-8.5, z); safeLantern(8.5, z); }
@@ -1580,33 +1580,27 @@ function spawnCar(startX, startZ, dir, lane, speed, color) {
 
 const trafficCars = [];
 
-// N-S Hauptstraße (x=0): 6 Autos pro Richtung
-for (let i = 0; i < 6; i++) {
-  trafficCars.push(spawnCar(-3.5, -130 + i*40, 'NS', +1, 2.5 + Math.random(), randomColor()));
-  trafficCars.push(spawnCar( 3.5,  130 - i*40, 'NS', -1, 2.0 + Math.random(), randomColor()));
+// Mobile-Optimiert: max 16 Autos gesamt
+// N-S Hauptstraße (x=0): 2 pro Richtung
+for (let i = 0; i < 2; i++) {
+  trafficCars.push(spawnCar(-3.5, -100 + i*120, 'NS', +1, 2.5 + Math.random(), randomColor()));
+  trafficCars.push(spawnCar( 3.5,  100 - i*120, 'NS', -1, 2.0 + Math.random(), randomColor()));
 }
-// N-S Nebenstraße x=-80
-for (let i = 0; i < 4; i++) {
-  trafficCars.push(spawnCar(-80-2.2, -100 + i*50, 'NS', +1, 1.8 + Math.random()*0.8, randomColor()));
-  trafficCars.push(spawnCar(-80+2.2,  100 - i*50, 'NS', -1, 1.5 + Math.random()*0.8, randomColor()));
+// N-S Nebenstraßen: 1 pro Richtung
+trafficCars.push(spawnCar(-80-2.2, -80, 'NS', +1, 1.8, randomColor()));
+trafficCars.push(spawnCar(-80+2.2,  80, 'NS', -1, 1.5, randomColor()));
+trafficCars.push(spawnCar( 80-2.2, -80, 'NS', +1, 1.8, randomColor()));
+trafficCars.push(spawnCar( 80+2.2,  80, 'NS', -1, 1.5, randomColor()));
+// O-W Hauptstraße (z=0): 2 pro Richtung
+for (let i = 0; i < 2; i++) {
+  trafficCars.push(spawnCar(-100 + i*120, -3.5, 'OW', +1, 2.5 + Math.random(), randomColor()));
+  trafficCars.push(spawnCar( 100 - i*120,  3.5, 'OW', -1, 2.0 + Math.random(), randomColor()));
 }
-// N-S Nebenstraße x=+80
-for (let i = 0; i < 4; i++) {
-  trafficCars.push(spawnCar(80-2.2, -100 + i*50, 'NS', +1, 1.8 + Math.random()*0.8, randomColor()));
-  trafficCars.push(spawnCar(80+2.2,  100 - i*50, 'NS', -1, 1.5 + Math.random()*0.8, randomColor()));
-}
-// O-W Hauptstraße (z=0): 6 Autos pro Richtung
-for (let i = 0; i < 6; i++) {
-  trafficCars.push(spawnCar(-130 + i*40, -3.5, 'OW', +1, 2.5 + Math.random(), randomColor()));
-  trafficCars.push(spawnCar( 130 - i*40,  3.5, 'OW', -1, 2.0 + Math.random(), randomColor()));
-}
-// O-W Nebenstraßen z=±80
-for (let i = 0; i < 4; i++) {
-  trafficCars.push(spawnCar(-100 + i*50, -80-2.2, 'OW', +1, 1.8+Math.random()*0.8, randomColor()));
-  trafficCars.push(spawnCar( 100 - i*50, -80+2.2, 'OW', -1, 1.5+Math.random()*0.8, randomColor()));
-  trafficCars.push(spawnCar(-100 + i*50,  80-2.2, 'OW', +1, 1.8+Math.random()*0.8, randomColor()));
-  trafficCars.push(spawnCar( 100 - i*50,  80+2.2, 'OW', -1, 1.5+Math.random()*0.8, randomColor()));
-}
+// O-W Nebenstraßen: 1 pro Richtung
+trafficCars.push(spawnCar(-80, -80-2.2, 'OW', +1, 1.8, randomColor()));
+trafficCars.push(spawnCar( 80, -80+2.2, 'OW', -1, 1.5, randomColor()));
+trafficCars.push(spawnCar(-80,  80-2.2, 'OW', +1, 1.8, randomColor()));
+trafficCars.push(spawnCar( 80,  80+2.2, 'OW', -1, 1.5, randomColor()));
 
 // ================================================================
 //  PEDESTRIANS
@@ -1629,7 +1623,7 @@ spawnPed( 7.4,-78,-92,-28);
 // ================================================================
 //  PARTICLES
 // ================================================================
-const SNOW_POOL  = 800;
+const SNOW_POOL  = 250;
 const snowPool   = [];
 const brushPool  = [];
 const spreadPool = [];
@@ -2037,7 +2031,7 @@ function animate() {
   lastT = now;
 
   // ---- Physics ----
-  world.step(1/60, dt, 3);
+  world.step(1/30, dt, 1); // Mobile: 1 substep
 
   // ---- Vehicle input ----
   if (!onFoot) {
