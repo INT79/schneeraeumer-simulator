@@ -1023,6 +1023,71 @@ for (let t = -130; t <= 130; t += 14) {
 //  STATIC OBJECTS
 // ================================================================
 
+// ================================================================
+//  STRASSENSCHILDER (Berliner Stil, echte Hermsdorfer Namen)
+// ================================================================
+const NS_NAMES = { '-80': 'Schulzendorfer Str.', '0': 'Hermsdorfer Damm', '80': 'Hohefeldstraße' };
+const OW_NAMES = { '-80': 'Triftstraße',         '0': 'Waidmannsluster Damm', '80': 'Finsterwalder Str.' };
+
+// Schildertextur: Berliner Grün + weißer Text
+function makeSignTex(line1, line2) {
+  const cv = document.createElement('canvas');
+  cv.width = 320; cv.height = 72;
+  const ctx = cv.getContext('2d');
+  // Hintergrund: Berliner Straßenschildgrün
+  ctx.fillStyle = '#205c30';
+  ctx.fillRect(0, 0, 320, 72);
+  // Weißer Rand
+  ctx.strokeStyle = 'white'; ctx.lineWidth = 3;
+  ctx.strokeRect(4, 4, 312, 64);
+  // Text Zeile 1
+  ctx.fillStyle = 'white';
+  ctx.font = 'bold 24px Arial, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(line1, 160, 32);
+  // Text Zeile 2 (kleiner, falls vorhanden)
+  if (line2) {
+    ctx.font = '17px Arial, sans-serif';
+    ctx.fillStyle = '#d0e8d8';
+    ctx.fillText(line2, 160, 56);
+  }
+  return new THREE.CanvasTexture(cv);
+}
+
+function addStreetSign(ix, iz, nsName, owName) {
+  const g = new THREE.Group();
+  // Mast (grau)
+  g.add(cyl(0.04, 0.04, 3.6, 6, 0x777777, 0, 1.8, 0));
+  // Schild für N-S-Straße (zeigt in X-Richtung)
+  const mat1 = new THREE.MeshLambertMaterial({ map: makeSignTex(nsName, null), side: THREE.DoubleSide });
+  const sign1 = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 0.58), mat1);
+  sign1.position.set(0, 3.5, 0);
+  sign1.rotation.y = 0; // zeigt nach N/S
+  g.add(sign1);
+  // Schild für O-W-Straße (zeigt in Z-Richtung)
+  const mat2 = new THREE.MeshLambertMaterial({ map: makeSignTex(owName, null), side: THREE.DoubleSide });
+  const sign2 = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 0.58), mat2);
+  sign2.position.set(0, 3.0, 0);
+  sign2.rotation.y = Math.PI / 2; // zeigt nach O/W
+  g.add(sign2);
+  // Leichte Neigung für Lesbarkeit
+  g.position.set(ix, 0, iz);
+  g.castShadow = true;
+  scene.add(g);
+}
+
+// Schilder an allen 9 Kreuzungen (leicht versetzt aus Fahrbahn-Mitte)
+[-80, 0, 80].forEach(x => {
+  [-80, 0, 80].forEach(z => {
+    const nsW = x === 0 ? 7.0 : 4.5;
+    const owW = z === 0 ? 7.0 : 4.5;
+    // Schild in NE-Ecke der Kreuzung
+    const sx = x + nsW + 1.2;
+    const sz = z + owW + 1.2;
+    addStreetSign(sx, sz, NS_NAMES[String(x)], OW_NAMES[String(z)]);
+  });
+});
+
 // --- Laternen ---
 function addLantern(px, pz) {
   const g = new THREE.Group();
