@@ -1701,7 +1701,7 @@ function animate() {
       if (jFwd > 0.08)       engineForce = MAX_FORCE * Math.min(jFwd, 1.0);
       else if (jFwd < -0.08) engineForce = -MAX_FORCE * 0.45 * Math.min(-jFwd, 1.0);
       else                   engineForce *= 0.85;
-      steeringVal = joystick.x * MAX_STEER;
+      steeringVal = -joystick.x * MAX_STEER; // Vorzeichen invertiert (Kamera-Perspektive)
     } else {
       if (keys[keyBindings.forward])     engineForce = Math.min(engineForce + 1200*dt, MAX_FORCE);
       else if (keys[keyBindings.backward]) engineForce = Math.max(engineForce - 1200*dt, -MAX_FORCE*0.45);
