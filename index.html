@@ -1304,18 +1304,20 @@ function clearSnow(wx, wz, rad) {
   }
   return chg;
 }
-function clearSnowLine(wx, wz, halfWidth, amount) {
-  // Räumt entlang der Fahrtrichtung - jedes betroffene Cell um 'amount' reduzieren
+function clearSnowLine(wx, wz, halfWidth, amount, halfDepth) {
+  // halfDepth: Tiefe in Fahrtrichtung (Z). Default = CELL/2 = 1 Zelle tief
+  if (halfDepth === undefined) halfDepth = halfWidth;
   const ci = Math.floor((wx + MSIZE/2) / CELL);
   const cj = Math.floor((wz + MSIZE/2) / CELL);
-  const r = Math.ceil(halfWidth / CELL);
+  const ri = Math.ceil(halfWidth / CELL);
+  const rj = Math.ceil(halfDepth / CELL);
   let changed = false;
-  for (let i = ci-r; i <= ci+r; i++) {
-    for (let j = cj-r; j <= cj+r; j++) {
+  for (let i = ci-ri; i <= ci+ri; i++) {
+    for (let j = cj-rj; j <= cj+rj; j++) {
       if (i < 0 || i >= GRID || j < 0 || j >= GRID) continue;
-      // Nur Zellen innerhalb der Breite räumen
       const dx = (i - ci) * CELL;
-      if (Math.abs(dx) <= halfWidth) {
+      const dz = (j - cj) * CELL;
+      if (Math.abs(dx) <= halfWidth && Math.abs(dz) <= halfDepth) {
         const idx = i * GRID + j;
         if (snowGrid[idx] > 0) {
           snowGrid[idx] = Math.max(0, snowGrid[idx] - amount);
@@ -1399,8 +1401,8 @@ function animate() {
   if (!onFoot) {
     chassisCannonBody.wakeUp(); // verhindert Sleep-Problem
 
-    if (keys[keyBindings.forward])     engineForce = Math.min(engineForce + 3000*dt, MAX_FORCE);
-    else if (keys[keyBindings.backward]) engineForce = Math.max(engineForce - 3000*dt, -MAX_FORCE*0.45);
+    if (keys[keyBindings.forward])     engineForce = Math.min(engineForce + 1200*dt, MAX_FORCE);
+    else if (keys[keyBindings.backward]) engineForce = Math.max(engineForce - 1200*dt, -MAX_FORCE*0.45);
     else                                  engineForce *= 0.85;
 
     if      (keys[keyBindings.steerRight]) steeringVal = Math.min(steeringVal + 2.5*dt, MAX_STEER);
@@ -1534,7 +1536,7 @@ function animate() {
             0.5);
         }
         // Schnee graduell räumen — sehr schmale Schaufelspur
-        if (clearSnowLine(playerPed.position.x, playerPed.position.z, 0.48, 0.30)) texDirty = true; // Fußgänger: 1.25x Figurbreite
+        if (clearSnowLine(playerPed.position.x, playerPed.position.z, 0.74, 0.35, 0.74)) texDirty = true; // Fußgänger: 1 Zelle (1.5m×1.5m)
         if (shovelAnim <= 0) { playerPed.rotation.z = 0; }
       }
 
