@@ -541,81 +541,81 @@ function addPlane(w, d, color, px, py, pz) {
 }
 
 // ================================================================
-// BERLINER STRASSENQUERSCHNITT — Realistischer Mehrstreifen-Aufbau
-// (Hermsdorfer Damm als Vorbild für Hauptstraßen)
+// 3×3 STADTSTRASSEN-RASTER (N-S bei x=-80,0,+80 / O-W bei z=-80,0,+80)
 // ================================================================
-// Zusätzliche Straßenfarben
-const COL_PARK   = 0x7a7a72;  // Parkstreifen (mittelgrau)
-const COL_BORD   = 0x766655;  // Bordstein (warmes grau)
-const COL_PFLAST = 0x5a5248;  // Kleinsteinpflaster (körnig dunkelgrau)
-const COL_FUSS   = 0x8a8a82;  // Fußweg Betonplatten (hellgrau)
-const COL_RAD    = 0x6a5050;  // Radweg (leicht rötlicher Asphalt)
+const COL_FUSS = 0x8a8a82;  // Gehweg (hellgrau)
 
-// --- HAUPTSTRASSE (N-S, Mittellinie x=0) ---
-// Querschnitt je Seite: Fahrbahn 3m | Parken 2m | Bordstein | Pflaster 1m | Fußweg 2m | Radweg 1.5m | Grün 1m
-addPlane(6,   200, COL_ROAD,   0,      0.010, 0);   // Fahrbahn (6m gesamt)
-addPlane(2,   200, COL_PARK,  -4,      0.011, 0);   // Parkstreifen links (3–5m)
-addPlane(2,   200, COL_PARK,   4,      0.011, 0);   // Parkstreifen rechts
-addPlane(1,   200, COL_PFLAST,-5.8,    0.012, 0);   // Kleinsteinpflaster links (5.3–6.3m)
-addPlane(1,   200, COL_PFLAST, 5.8,    0.012, 0);   // Kleinsteinpflaster rechts
-addPlane(2,   200, COL_FUSS,  -7.3,    0.013, 0);   // Fußweg links (6.3–8.3m)
-addPlane(2,   200, COL_FUSS,   7.3,    0.013, 0);   // Fußweg rechts
-addPlane(1.5, 200, COL_RAD,   -9.05,   0.013, 0);   // Radweg links (8.3–9.8m)
-addPlane(1.5, 200, COL_RAD,    9.05,   0.013, 0);   // Radweg rechts
-addPlane(1,   200, COL_GRASS,-10.3,    0.011, 0);   // Grünstreifen links (9.8–10.8m)
-addPlane(1,   200, COL_GRASS, 10.3,    0.011, 0);   // Grünstreifen rechts
+// Gras-Unterboden (gesamte Karte)
+addPlane(600, 600, COL_GRASS, 0, 0.009, 0);
 
-// Bordstein Hauptstraße (erhöhte Kante Parken→Pflaster, bei x=±5.15)
-{ const b1 = box(0.25, 0.12, 200, COL_BORD, -5.15, 0.06, 0); scene.add(b1); }
-{ const b2 = box(0.25, 0.12, 200, COL_BORD,  5.15, 0.06, 0); scene.add(b2); }
-
-// Gras hinter Grünstreifen (ab x=±11 nach außen)
-addPlane(48, 200, COL_GRASS, -36, 0.010, 0);
-addPlane(48, 200, COL_GRASS,  36, 0.010, 0);
-
-// --- NEBENSTRASSEN (E-W, residential) ---
-// Querschnitt je Seite: Fahrbahn 2.75m | Parken 1.5m | Pflaster 0.5m | Fußweg 1.5m
-const csZ = [-75, -35, 10, 52];
-csZ.forEach(z => {
-  addPlane(120, 5.5,  COL_ROAD,   0, 0.015, z);          // Fahrbahn (5.5m gesamt)
-  addPlane(120, 1.5,  COL_PARK,   0, 0.016, z - 3.5);    // Parkstreifen N (2.75–4.25m)
-  addPlane(120, 1.5,  COL_PARK,   0, 0.016, z + 3.5);    // Parkstreifen S
-  addPlane(120, 0.5,  COL_PFLAST, 0, 0.016, z - 4.5);    // Kleinsteinpflaster N
-  addPlane(120, 0.5,  COL_PFLAST, 0, 0.016, z + 4.5);    // Kleinsteinpflaster S
-  addPlane(120, 1.5,  COL_FUSS,   0, 0.017, z - 5.5);    // Fußweg N (4.75–6.25m)
-  addPlane(120, 1.5,  COL_FUSS,   0, 0.017, z + 5.5);    // Fußweg S
-  // Bordsteine Nebenstraße
-  { const bA = box(120, 0.10, 0.20, COL_BORD, 0, 0.05, z - 4.25); scene.add(bA); }
-  { const bB = box(120, 0.10, 0.20, COL_BORD, 0, 0.05, z + 4.25); scene.add(bB); }
-});
-
-// Dashed centre line — main street
-for (let z = -97; z < 98; z += 8) {
-  const m = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.18, 4),
-    new THREE.MeshLambertMaterial({ color: 0xffffff })
-  );
-  m.rotation.x = -Math.PI / 2;
-  m.position.set(0, 0.02, z);
-  scene.add(m);
+function buildStreet(cx, cz, w, len, dir) {
+  // dir: 'NS' = entlang Z-Achse, 'OW' = entlang X-Achse
+  const geo = dir === 'NS'
+    ? new THREE.PlaneGeometry(w, len)
+    : new THREE.PlaneGeometry(len, w);
+  const mat = new THREE.MeshLambertMaterial({ color: COL_ROAD });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.set(cx, 0.011, cz);
+  mesh.receiveShadow = true;
+  scene.add(mesh);
+  // Mittelstreifen (weiße Linie)
+  const lineGeo = dir === 'NS'
+    ? new THREE.PlaneGeometry(0.12, len)
+    : new THREE.PlaneGeometry(len, 0.12);
+  const lineMat = new THREE.MeshLambertMaterial({ color: 0xffffff, opacity: 0.7, transparent: true });
+  const line = new THREE.Mesh(lineGeo, lineMat);
+  line.rotation.x = -Math.PI / 2;
+  line.position.set(cx, 0.013, cz);
+  scene.add(line);
 }
-// Dashed lines — cross streets
-csZ.forEach(z => {
-  for (let x = -57; x < 57; x += 8) {
-    const m = new THREE.Mesh(
-      new THREE.PlaneGeometry(4, 0.18),
-      new THREE.MeshLambertMaterial({ color: 0xffffff })
-    );
-    m.rotation.x = -Math.PI / 2;
-    m.position.set(x, 0.02, z);
-    scene.add(m);
-  }
+
+function buildSidewalk(cx, cz, w, len, dir) {
+  const geo = dir === 'NS'
+    ? new THREE.PlaneGeometry(w, len)
+    : new THREE.PlaneGeometry(len, w);
+  const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: COL_FUSS }));
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.set(cx, 0.012, cz);
+  mesh.receiveShadow = true;
+  scene.add(mesh);
+}
+
+// N-S Straßen (3 Stück, entlang Z-Achse)
+[-80, 0, 80].forEach(x => {
+  const w = x === 0 ? 14 : 9;
+  buildStreet(x, 0, w, 300, 'NS');
+  buildSidewalk(x - w/2 - 2, 0, 2.5, 300, 'NS');
+  buildSidewalk(x + w/2 + 2, 0, 2.5, 300, 'NS');
 });
 
-// Straßenbäume im Grünstreifen der Hauptstraße (alle ~10m)
-for (let zT = -95; zT <= 95; zT += 10) {
-  addTree(-10.3, zT);
-  addTree( 10.3, zT);
+// O-W Straßen (3 Stück, entlang X-Achse)
+[-80, 0, 80].forEach(z => {
+  const w = z === 0 ? 14 : 9;
+  buildStreet(0, z, w, 300, 'OW');
+  buildSidewalk(0, z - w/2 - 2, 2.5, 300, 'OW');
+  buildSidewalk(0, z + w/2 + 2, 2.5, 300, 'OW');
+});
+
+// Kreuzungsplatten (Asphalt über die 9 Schnittpunkte)
+[-80, 0, 80].forEach(x => {
+  [-80, 0, 80].forEach(z => {
+    const wx = x === 0 ? 14 : 9;
+    const wz = z === 0 ? 14 : 9;
+    const sz = Math.max(wx, wz) + 2;
+    buildStreet(x, z, sz, sz, 'OW');
+  });
+});
+
+// csZ für Schilder und Minimap (O-W-Straßen bei z=-80,0,+80)
+const csZ = [-80, 0, 80];
+
+// Straßenbäume entlang der Hauptachsen (neben der Mittelspur, x=0 / z=0)
+for (let t = -130; t <= 130; t += 12) {
+  addTree(-9, t);
+  addTree( 9, t);
+  addTree(t, -9);
+  addTree(t,  9);
 }
 
 // ================================================================
@@ -680,20 +680,25 @@ function addBuilding(cx, cz, w, d, h, ci, saddle) {
 }
 
 const BLDGS = [
-  // left side (negative x)
-  [-18, -88, 8, 10, 6, 0, true],  [-18, -73, 8, 10, 6, 1, false],
-  [-18, -56, 8, 10, 6, 2, true],  [-22, -22, 15, 12, 10, 3, false],
-  [-18,   4, 8, 10, 6, 4, true],  [-18,  20, 8, 10, 6, 0, false],
-  [-18,  36, 8, 10, 6, 1, true],  [-22,  62, 15, 12, 10, 2, false],
-  [-18,  80, 8, 10, 6, 3, true],  [-18,  93, 8, 10, 6, 4, false],
-  [-34, -55, 15, 12, 10, 1, false],[-34,  30, 15, 12, 10, 0, false],
-  // right side (positive x)
-  [18, -82, 8, 10, 6, 2, true],   [18, -66, 8, 10, 6, 3, false],
-  [22, -48, 15, 12, 10, 4, false], [18, -13, 8, 10, 6, 0, true],
-  [18,   6, 8, 10, 6, 1, false],  [18,  22, 8, 10, 6, 2, true],
-  [18,  42, 8, 10, 6, 3, false],  [18,  60, 8, 10, 6, 4, true],
-  [22,  78, 15, 12, 10, 0, false], [34, -72, 15, 12, 10, 3, false],
-  [34,  14, 15, 12, 10, 1, false], [34,  68, 8, 10, 6, 2, true],
+  // Block SW: x≈-40, z≈-40 (zwischen x=-80..0, z=-80..0)
+  [-50, -50,  8, 10,  6, 0, true],  [-38, -55,  8, 10,  6, 1, false],
+  [-28, -45, 15, 12, 10, 2, false], [-52, -35,  8, 10,  6, 3, true],
+  [-40, -30,  8, 10,  6, 4, false], [-30, -60,  8, 10,  8, 0, true],
+
+  // Block SO: x≈+40, z≈-40 (zwischen x=0..+80, z=-80..0)
+  [ 50, -50,  8, 10,  6, 1, true],  [ 38, -55,  8, 10,  6, 2, false],
+  [ 28, -45, 15, 12, 10, 3, false], [ 52, -35,  8, 10,  6, 4, true],
+  [ 40, -30,  8, 10,  6, 0, false], [ 30, -60,  8, 10,  8, 1, true],
+
+  // Block NW: x≈-40, z≈+40 (zwischen x=-80..0, z=0..+80)
+  [-50,  50,  8, 10,  6, 2, true],  [-38,  55,  8, 10,  6, 3, false],
+  [-28,  45, 15, 12, 10, 4, false], [-52,  35,  8, 10,  6, 0, true],
+  [-40,  30,  8, 10,  6, 1, false], [-30,  60,  8, 10,  8, 2, true],
+
+  // Block NO: x≈+40, z≈+40 (zwischen x=0..+80, z=0..+80)
+  [ 50,  50,  8, 10,  6, 3, true],  [ 38,  55,  8, 10,  6, 4, false],
+  [ 28,  45, 15, 12, 10, 0, false], [ 52,  35,  8, 10,  6, 1, true],
+  [ 40,  30,  8, 10,  6, 2, false], [ 30,  60,  8, 10,  8, 3, true],
 ];
 BLDGS.forEach(b => addBuilding(...b));
 
@@ -1004,7 +1009,7 @@ vGroup.add(headR);
 // ================================================================
 const chassisCannonBody = new CANNON.Body({ mass: 900, material: matVehicle });
 chassisCannonBody.addShape(new CANNON.Box(new CANNON.Vec3(0.75, 0.5, 1.5)));
-chassisCannonBody.position.set(0, 2.5, -20);
+chassisCannonBody.position.set(0, 2.5, -40);
 chassisCannonBody.linearDamping  = 0.20;
 chassisCannonBody.angularDamping = 0.65;
 world.addBody(chassisCannonBody);
@@ -1113,7 +1118,7 @@ spawnPed( 7.4,-78,-92,-28);
 // ================================================================
 //  PARTICLES
 // ================================================================
-const SNOW_POOL  = 300;
+const SNOW_POOL  = 800;
 const snowPool   = [];
 const brushPool  = [];
 const spreadPool = [];
@@ -1121,7 +1126,7 @@ const spreadPool = [];
 const sm = new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: new THREE.Color(0xaaccff), emissiveIntensity: 0.3 });
 const bm = new THREE.MeshLambertMaterial({ color: 0xddeeff });
 const pm = new THREE.MeshLambertMaterial({ color: 0xaa8833 });
-const sg = new THREE.SphereGeometry(0.12, 4, 4);  // größer: 0.05 → 0.12
+const sg = new THREE.SphereGeometry(0.18, 4, 4);  // Schneeflocken
 const sg2 = new THREE.SphereGeometry(0.10, 4, 4);
 
 for (let i = 0; i < SNOW_POOL; i++) {
@@ -1269,7 +1274,7 @@ document.getElementById('w-close').addEventListener('click', () => {
 });
 
 const weatherIcons = { sunny:'☀️', cloudy:'🌤', light:'🌨', heavy:'❄️', night:'🌙' };
-const weatherFog   = { sunny:0.003, cloudy:0.006, light:0.009, heavy:0.018, night:0.022 };
+const weatherFog   = { sunny:0.002, cloudy:0.007, light:0.020, heavy:0.055, night:0.025 };
 const weatherSnow  = { sunny:0, cloudy:0, light:60, heavy:220, night:130 };
 const weatherRefill = { sunny:0, cloudy:0, light:0.003, heavy:0.01, night:0.007 };
 
@@ -1470,12 +1475,12 @@ function updateDayNight(dt) {
     ambLight.intensity = 0.3;
   } else {
     sunLight.intensity = 0;
-    ambLight.intensity = 0.12;
+    ambLight.intensity = 0.06; // Nacht: sehr dunkel
   }
 
   // Sky colour
   if (h < 5 || h >= 22) {
-    scene.background = new THREE.Color(0x050510);
+    scene.background = new THREE.Color(0x01010a);
   } else if (dusk) {
     const t = (h < 6) ? (h - 5) : (21 - h);
     scene.background = new THREE.Color().lerpColors(
@@ -1701,13 +1706,16 @@ function animate() {
   // ---- Snow weather particles ----
   const activeSnow = snowFallTarget;
   if (activeSnow > 0) {
-    const toSpawn = Math.floor(activeSnow * dt * 15);
+    const toSpawn = Math.floor(activeSnow * dt * 40); // 40 statt 15 = 2.5× dichter
+    const wind = activeSnow > 100 ? 1.5 : 0.3; // bei starkem Schnee: Wind
     for (let i = 0; i < toSpawn; i++) {
-      const cx3 = camera.position.x + (Math.random()-0.5)*40;
-      const cz3 = camera.position.z + (Math.random()-0.5)*40;
-      spawnParticle(snowPool, cx3, camera.position.y + 5 + Math.random()*8, cz3,
-        (Math.random()-0.5)*0.5, -2.5 - Math.random()*1.5, (Math.random()-0.5)*0.5,
-        4 + Math.random()*3);
+      const cx3 = camera.position.x + (Math.random()-0.5)*60;
+      const cz3 = camera.position.z + (Math.random()-0.5)*60;
+      spawnParticle(snowPool, cx3, camera.position.y + 8 + Math.random()*10, cz3,
+        (Math.random()-0.5)*wind + (activeSnow > 100 ? -0.8 : 0),
+        -3.0 - Math.random()*2.5,
+        (Math.random()-0.5)*wind,
+        3 + Math.random()*2);
     }
   }
   updatePool(snowPool,    dt, 0);
@@ -1899,6 +1907,9 @@ if (isMobile && window.innerHeight > window.innerWidth) {
     <div style="display:flex;gap:6px;">
       <div class="t-btn sm" data-toggle="exit" title="Aussteigen/Einsteigen">🚶</div>
       <div class="t-btn sm" data-toggle="shovel" title="Handräumung (Besen)">🧹</div>
+    </div>
+    <div style="display:flex;gap:6px;">
+      <div class="t-btn sm" id="t-weather" title="Wetter wechseln">🌦️</div>
     </div>
   </div>
 </div>
