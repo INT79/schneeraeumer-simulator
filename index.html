@@ -121,6 +121,36 @@ canvas#gameCanvas { display: block; position: fixed; top: 0; left: 0; }
 .key-btn.listening { background: #1a3a1a; border-color: #4f4; color: #4f4; }
 .key-btn:hover { border-color: #FFD600; }
 #settings-close { margin-top: 14px; background: #333; color: #fff; border: 1px solid #555; border-radius: 6px; padding: 6px 16px; cursor: pointer; float: right; }
+
+/* ---- Mobile Touch Controls ---- */
+#touch-controls {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  display: none;
+  padding: 12px 10px 18px;
+  background: linear-gradient(transparent, rgba(0,0,0,0.5));
+  z-index: 50;
+  user-select: none; -webkit-user-select: none;
+  touch-action: none;
+}
+#touch-left { position: absolute; bottom: 18px; left: 10px; }
+#touch-right { position: absolute; bottom: 18px; right: 10px; }
+#touch-center { position: absolute; bottom: 22px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; }
+.t-btn {
+  width: 58px; height: 58px; border-radius: 10px;
+  background: rgba(44,49,85,0.82); border: 2px solid rgba(128,150,200,0.7);
+  color: #fff; font-size: 22px; font-weight: bold;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+  transition: background 0.1s;
+}
+.t-btn.active { background: rgba(128,150,200,0.6); }
+.t-btn.sm { width: 46px; height: 46px; font-size: 16px; }
+#t-dpad { display: grid; grid-template-columns: 58px 58px 58px; grid-template-rows: 58px 58px; gap: 4px; }
+#t-dpad .t-fwd { grid-column: 2; grid-row: 1; }
+#t-dpad .t-left { grid-column: 1; grid-row: 2; }
+#t-dpad .t-brake { grid-column: 2; grid-row: 2; }
+#t-dpad .t-right { grid-column: 3; grid-row: 2; }
+
 </style>
 </head>
 <body>
@@ -1759,6 +1789,81 @@ document.getElementById('settings-close').addEventListener('click', () => {
     listeningBtn = null;
   }
 });
+
+// ================================================================
+//  MOBILE TOUCH CONTROLS
+// ================================================================
+const isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || (window.innerWidth < 768);
+
+// Touch-init nach DOM-Ready (HTML kommt nach Script)
+window.addEventListener('load', () => {
+  const tc = document.getElementById('touch-controls');
+  if (tc && isMobile) tc.style.display = 'block';
+
+  // Touch-Tasten → keys[] setzen
+  document.querySelectorAll('.t-btn[data-key]').forEach(btn => {
+  const action = btn.dataset.key;
+  const setActive = (on) => {
+    const code = keyBindings[action];
+    if (code) keys[code] = on;
+    btn.classList.toggle('active', on);
+    initAudio();
+  };
+  btn.addEventListener('touchstart', e => { e.preventDefault(); setActive(true); }, { passive: false });
+  btn.addEventListener('touchend',   e => { e.preventDefault(); setActive(false); }, { passive: false });
+  btn.addEventListener('mousedown',  e => { e.preventDefault(); setActive(true); });
+  btn.addEventListener('mouseup',    e => { e.preventDefault(); setActive(false); });
+});
+
+// Toggle-Buttons (Bürste, Streuer, etc.)
+document.querySelectorAll('.t-btn[data-toggle]').forEach(btn => {
+  btn.addEventListener('touchstart', e => {
+    e.preventDefault();
+    initAudio();
+    const action = btn.dataset.toggle;
+    if (action === 'brush' && !onFoot)    { brushOn    = !brushOn;    updateHUD(); btn.classList.toggle('active', brushOn); }
+    if (action === 'spreader' && !onFoot) { spreaderOn = !spreaderOn; updateHUD(); btn.classList.toggle('active', spreaderOn); }
+    if (action === 'exit')   toggleFoot();
+    if (action === 'shovel' && onFoot && playerPed && shovelAnim <= 0) { shovelAnim = 0.65; }
+  }, { passive: false });
+});
+
+// Landscape-Hinweis auf sehr kleinen Screens
+if (isMobile && window.innerHeight > window.innerWidth) {
+  const hint = document.createElement('div');
+  hint.style.cssText = 'position:fixed;top:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.7);color:#FFD600;padding:6px 14px;border-radius:8px;font-size:13px;z-index:200;';
+  hint.textContent = '📱 Querformat empfohlen';
+  document.body.appendChild(hint);
+  setTimeout(() => hint.remove(), 4000);
+  }
+}); // end window.load
+
 </script>
+
+<!-- Mobile Touch Controls -->
+<div id="touch-controls">
+  <div id="touch-left">
+    <div id="t-dpad">
+      <div class="t-btn t-fwd" data-key="forward">▲</div>
+      <div class="t-btn t-left" data-key="steerRight">◀</div>
+      <div class="t-btn t-brake" data-key="brake">■</div>
+      <div class="t-btn t-right" data-key="steerLeft">▶</div>
+    </div>
+    <div style="margin-top:4px; display:flex; gap:4px;">
+      <div class="t-btn" data-key="backward" style="width:120px; font-size:14px;">▼ Rückwärts</div>
+    </div>
+  </div>
+  <div id="touch-right" style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;">
+    <div style="display:flex;gap:6px;">
+      <div class="t-btn sm" data-toggle="brush" title="Bürste">🪣</div>
+      <div class="t-btn sm" data-toggle="spreader" title="Streuer">🧂</div>
+    </div>
+    <div style="display:flex;gap:6px;">
+      <div class="t-btn sm" data-toggle="exit" title="Aussteigen/Einsteigen">🚶</div>
+      <div class="t-btn sm" data-toggle="shovel" title="Schaufel">🔨</div>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
