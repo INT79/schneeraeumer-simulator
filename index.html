@@ -480,7 +480,7 @@ function cyl(rt, rb, h, seg, color, px, py, pz, rx = 0, rz = 0) {
 // ================================================================
 //  MAP — STRASSEN, GEHWEGE, MARKIERUNGEN
 // ================================================================
-const COL_ROAD = 0x2e2e2e;
+const COL_ROAD = 0x4a4a52;   // Asphalt dunkelgrau-blau
 const COL_SIDE = 0xb0b0b0;
 const COL_SNOW = 0xe8eef4;
 const COL_GRASS = 0x3a6030;
@@ -497,22 +497,53 @@ function addPlane(w, d, color, px, py, pz) {
   return m;
 }
 
-// Main street (N-S along Z, x=0)
-addPlane(7, 200, COL_ROAD,  0, 0.01, 0);
-// Sidewalks left / right
-addPlane(2.5, 200, COL_SIDE, -5.25, 0.05, 0);
-addPlane(2.5, 200, COL_SIDE,  5.25, 0.05, 0);
+// ================================================================
+// BERLINER STRASSENQUERSCHNITT — Realistischer Mehrstreifen-Aufbau
+// (Hermsdorfer Damm als Vorbild für Hauptstraßen)
+// ================================================================
+// Zusätzliche Straßenfarben
+const COL_PARK   = 0x7a7a72;  // Parkstreifen (mittelgrau)
+const COL_BORD   = 0x766655;  // Bordstein (warmes grau)
+const COL_PFLAST = 0x5a5248;  // Kleinsteinpflaster (körnig dunkelgrau)
+const COL_FUSS   = 0x8a8a82;  // Fußweg Betonplatten (hellgrau)
+const COL_RAD    = 0x6a5050;  // Radweg (leicht rötlicher Asphalt)
 
-// Grass behind sidewalks
-addPlane(50, 200, COL_GRASS, -35, 0.01, 0);
-addPlane(50, 200, COL_GRASS,  35, 0.01, 0);
+// --- HAUPTSTRASSE (N-S, Mittellinie x=0) ---
+// Querschnitt je Seite: Fahrbahn 3m | Parken 2m | Bordstein | Pflaster 1m | Fußweg 2m | Radweg 1.5m | Grün 1m
+addPlane(6,   200, COL_ROAD,   0,      0.010, 0);   // Fahrbahn (6m gesamt)
+addPlane(2,   200, COL_PARK,  -4,      0.011, 0);   // Parkstreifen links (3–5m)
+addPlane(2,   200, COL_PARK,   4,      0.011, 0);   // Parkstreifen rechts
+addPlane(1,   200, COL_PFLAST,-5.8,    0.012, 0);   // Kleinsteinpflaster links (5.3–6.3m)
+addPlane(1,   200, COL_PFLAST, 5.8,    0.012, 0);   // Kleinsteinpflaster rechts
+addPlane(2,   200, COL_FUSS,  -7.3,    0.013, 0);   // Fußweg links (6.3–8.3m)
+addPlane(2,   200, COL_FUSS,   7.3,    0.013, 0);   // Fußweg rechts
+addPlane(1.5, 200, COL_RAD,   -9.05,   0.013, 0);   // Radweg links (8.3–9.8m)
+addPlane(1.5, 200, COL_RAD,    9.05,   0.013, 0);   // Radweg rechts
+addPlane(1,   200, COL_GRASS,-10.3,    0.011, 0);   // Grünstreifen links (9.8–10.8m)
+addPlane(1,   200, COL_GRASS, 10.3,    0.011, 0);   // Grünstreifen rechts
 
-// Cross streets (E-W)
+// Bordstein Hauptstraße (erhöhte Kante Parken→Pflaster, bei x=±5.15)
+{ const b1 = box(0.25, 0.12, 200, COL_BORD, -5.15, 0.06, 0); scene.add(b1); }
+{ const b2 = box(0.25, 0.12, 200, COL_BORD,  5.15, 0.06, 0); scene.add(b2); }
+
+// Gras hinter Grünstreifen (ab x=±11 nach außen)
+addPlane(48, 200, COL_GRASS, -36, 0.010, 0);
+addPlane(48, 200, COL_GRASS,  36, 0.010, 0);
+
+// --- NEBENSTRASSEN (E-W, residential) ---
+// Querschnitt je Seite: Fahrbahn 2.75m | Parken 1.5m | Pflaster 0.5m | Fußweg 1.5m
 const csZ = [-75, -35, 10, 52];
 csZ.forEach(z => {
-  addPlane(120, 6, COL_ROAD,   0, 0.015, z);
-  addPlane(120, 2.5, COL_SIDE, 0, 0.055, z - 4.25);
-  addPlane(120, 2.5, COL_SIDE, 0, 0.055, z + 4.25);
+  addPlane(120, 5.5,  COL_ROAD,   0, 0.015, z);          // Fahrbahn (5.5m gesamt)
+  addPlane(120, 1.5,  COL_PARK,   0, 0.016, z - 3.5);    // Parkstreifen N (2.75–4.25m)
+  addPlane(120, 1.5,  COL_PARK,   0, 0.016, z + 3.5);    // Parkstreifen S
+  addPlane(120, 0.5,  COL_PFLAST, 0, 0.016, z - 4.5);    // Kleinsteinpflaster N
+  addPlane(120, 0.5,  COL_PFLAST, 0, 0.016, z + 4.5);    // Kleinsteinpflaster S
+  addPlane(120, 1.5,  COL_FUSS,   0, 0.017, z - 5.5);    // Fußweg N (4.75–6.25m)
+  addPlane(120, 1.5,  COL_FUSS,   0, 0.017, z + 5.5);    // Fußweg S
+  // Bordsteine Nebenstraße
+  { const bA = box(120, 0.10, 0.20, COL_BORD, 0, 0.05, z - 4.25); scene.add(bA); }
+  { const bB = box(120, 0.10, 0.20, COL_BORD, 0, 0.05, z + 4.25); scene.add(bB); }
 });
 
 // Dashed centre line — main street
@@ -538,14 +569,11 @@ csZ.forEach(z => {
   }
 });
 
-// Curbs (Bordstein) — slight raised edge
-function addCurb(w, d, px, pz) {
-  const m = box(w, 0.12, d, 0x999999, px, 0.06, pz);
-  scene.add(m);
+// Straßenbäume im Grünstreifen der Hauptstraße (alle ~10m)
+for (let zT = -95; zT <= 95; zT += 10) {
+  addTree(-10.3, zT);
+  addTree( 10.3, zT);
 }
-// Along main street
-addCurb(0.15, 200, -4, 0);
-addCurb(0.15, 200,  4, 0);
 
 // ================================================================
 //  BUILDINGS
@@ -807,11 +835,11 @@ const vGroup = new THREE.Group();
 scene.add(vGroup);
 
 // Chassis body
-const chBody = box(1.5, 1.0, 3.0, 0xFFD600, 0, 0.5, 0);
+const chBody = box(1.5, 1.0, 3.0, 0x2c3155, 0, 0.5, 0); // IM NORDEN Dunkelblau
 vGroup.add(chBody);
 
 // Cabin
-const cabin = box(1.4, 0.9, 1.6, 0xFFD600, 0, 1.4, 0.3);
+const cabin = box(1.4, 0.9, 1.6, 0x8096c8, 0, 1.4, 0.3); // IM NORDEN Hellblau
 vGroup.add(cabin);
 
 // Windshield
@@ -821,22 +849,53 @@ wsMesh.position.set(0, 1.45, 1.15); wsMesh.rotation.x = -0.18;
 vGroup.add(wsMesh);
 
 // Logo on cabin
+// IM NORDEN Schriftzug auf Front (weiß auf dunkelblau)
 const logoCvs = document.createElement('canvas');
-logoCvs.width = 256; logoCvs.height = 64;
+logoCvs.width = 512; logoCvs.height = 128;
 const logoCtx = logoCvs.getContext('2d');
-logoCtx.fillStyle = '#FFD600';
-logoCtx.fillRect(0,0,256,64);
-logoCtx.fillStyle = '#000';
-logoCtx.font = 'bold 22px Arial';
+logoCtx.fillStyle = '#2c3155';
+logoCtx.fillRect(0,0,512,128);
+logoCtx.fillStyle = '#ffffff';
+logoCtx.font = 'bold 52px Arial';
 logoCtx.textAlign = 'center';
-logoCtx.fillText('IM NORDEN', 128, 42);
+logoCtx.textBaseline = 'middle';
+logoCtx.fillText('IM NORDEN', 256, 64);
 const logoTex = new THREE.CanvasTexture(logoCvs);
-const logoMesh = new THREE.Mesh(
-  new THREE.BoxGeometry(0.95, 0.22, 0.04),
+
+// Front-Schriftzug (auf Chassis vorne)
+const logoFront = new THREE.Mesh(
+  new THREE.BoxGeometry(1.4, 0.32, 0.02),
   new THREE.MeshLambertMaterial({ map: logoTex })
 );
-logoMesh.position.set(0, 2.0, 1.1);
-vGroup.add(logoMesh);
+logoFront.position.set(0, 0.85, 1.51);
+vGroup.add(logoFront);
+
+// Heck-Schriftzug (auf Chassis hinten - zur Kamera hin sichtbar)
+const logoRear = new THREE.Mesh(
+  new THREE.BoxGeometry(1.4, 0.32, 0.02),
+  new THREE.MeshLambertMaterial({ map: logoTex })
+);
+logoRear.position.set(0, 0.85, -1.51);
+logoRear.rotation.y = Math.PI;
+vGroup.add(logoRear);
+
+// Seiten-Schriftzug links
+const logoLeft = new THREE.Mesh(
+  new THREE.BoxGeometry(0.02, 0.28, 2.2),
+  new THREE.MeshLambertMaterial({ map: logoTex })
+);
+logoLeft.position.set(-0.76, 0.85, 0);
+logoLeft.rotation.y = -Math.PI/2;
+vGroup.add(logoLeft);
+
+// Seiten-Schriftzug rechts
+const logoRight = new THREE.Mesh(
+  new THREE.BoxGeometry(0.02, 0.28, 2.2),
+  new THREE.MeshLambertMaterial({ map: logoTex })
+);
+logoRight.position.set(0.76, 0.85, 0);
+logoRight.rotation.y = Math.PI/2;
+vGroup.add(logoRight);
 
 // Beacon
 const beaconG = new THREE.Group();
