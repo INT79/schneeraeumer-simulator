@@ -885,7 +885,7 @@ chassisCannonBody.addEventListener('collide', (e) => {
 
 // Vehicle state
 let engineForce = 0, steeringVal = 0;
-const MAX_FORCE   = 9000;
+const MAX_FORCE   = 5500;
 const MAX_STEER   = 0.44;
 const MAX_BRAKE   = 90;
 
@@ -1349,8 +1349,13 @@ function animate() {
 
     rayVehicle.setSteeringValue(steeringVal, 0);
     rayVehicle.setSteeringValue(steeringVal, 1);
-    rayVehicle.applyEngineForce(-engineForce, 2);
-    rayVehicle.applyEngineForce(-engineForce, 3);
+    // Geschwindigkeitslimit: 40 km/h = 11.1 m/s
+    const vel = chassisCannonBody.velocity;
+    const curSpd = Math.sqrt(vel.x*vel.x + vel.z*vel.z);
+    const speedCap = 11.1;
+    const cappedForce = curSpd > speedCap ? 0 : -engineForce;
+    rayVehicle.applyEngineForce(cappedForce, 2);
+    rayVehicle.applyEngineForce(cappedForce, 3);
     for (let i = 0; i < 4; i++) rayVehicle.setBrake(brake, i);
 
     // Upright stabilisation
@@ -1359,8 +1364,8 @@ function animate() {
     const ang = Math.acos(Math.min(1, bodyUp.dot(up)));
     if (ang > 0.08) {
       const torq = up.cross(bodyUp);
-      chassisCannonBody.torque.x += torq.x * 600;
-      chassisCannonBody.torque.z += torq.z * 600;
+      chassisCannonBody.torque.x += torq.x * 200;
+      chassisCannonBody.torque.z += torq.z * 200;
     }
 
     // Sync mesh
@@ -1380,7 +1385,7 @@ function animate() {
     if (brushOn && spd > 0.3) {
       const bx  = vGroup.position.x;
       const bz  = vGroup.position.z;
-      if (clearSnowLine(bx, bz, 0.75, 0.08)) texDirty = true; // amount=0.08 pro Frame → braucht ~12 Überfahrten
+      if (clearSnowLine(bx, bz, 1.5, 0.12)) texDirty = true; // Fahrzeugbreite 1.5m * 2 Seiten
       // brush particles
       if (Math.random() < 0.4) {
         spawnParticle(brushPool, bx + (Math.random()-0.5)*1.5, 0.3, bz + (Math.random()-0.5)*1.5,
