@@ -1195,13 +1195,35 @@ function clearSnow(wx, wz, rad) {
       if (gx >= 0 && gx < GRID && gz >= 0 && gz < GRID) {
         const idx = gx * GRID + gz;
         if (snowGrid[idx] > 0.05) {
-          snowGrid[idx] = 0; // sofortiger scharfer Übergang
+          snowGrid[idx] = 0;
           chg = true;
         }
       }
     }
   }
   return chg;
+}
+function clearSnowLine(wx, wz, halfWidth, amount) {
+  // Räumt entlang der Fahrtrichtung - jedes betroffene Cell um 'amount' reduzieren
+  const ci = Math.floor((wx + MSIZE/2) / CELL);
+  const cj = Math.floor((wz + MSIZE/2) / CELL);
+  const r = Math.ceil(halfWidth / CELL);
+  let changed = false;
+  for (let i = ci-r; i <= ci+r; i++) {
+    for (let j = cj-r; j <= cj+r; j++) {
+      if (i < 0 || i >= GRID || j < 0 || j >= GRID) continue;
+      // Nur Zellen innerhalb der Breite räumen
+      const dx = (i - ci) * CELL;
+      if (Math.abs(dx) <= halfWidth) {
+        const idx = i * GRID + j;
+        if (snowGrid[idx] > 0) {
+          snowGrid[idx] = Math.max(0, snowGrid[idx] - amount);
+          changed = true;
+        }
+      }
+    }
+  }
+  return changed;
 }
 
 // ================================================================
@@ -1316,11 +1338,11 @@ function animate() {
     }
 
     // Snow clearing
-    if (brushOn && spd > 0.5) {
-      const fwd = chassisCannonBody.vectorToWorldFrame(new CANNON.Vec3(0, 0, 1));
-      const bx  = chassisCannonBody.position.x + fwd.x * 1.6;
-      const bz  = chassisCannonBody.position.z + fwd.z * 1.6;
-      if (clearSnow(bx, bz, 0.75)) texDirty = true; // exakt Fahrzeugbreite
+    if (brushOn && spd > 0.3) {
+      const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(vGroup.quaternion);
+      const bx  = vGroup.position.x + fwd.x * 1.6;
+      const bz  = vGroup.position.z + fwd.z * 1.6;
+      if (clearSnowLine(bx, bz, 0.75, 0.15)) texDirty = true; // amount=0.15 pro Frame → braucht ~7 Überfahrten
       // brush particles
       if (Math.random() < 0.4) {
         spawnParticle(brushPool, bx + (Math.random()-0.5)*1.5, 0.3, bz + (Math.random()-0.5)*1.5,
@@ -1340,11 +1362,12 @@ function animate() {
         (Math.random()-0.5)*2, Math.random()*0.6+0.2, (Math.random()-0.5)*2, 1.2);
     }
 
-    // Camera
-    const camOff = new THREE.Vector3(0, 7, 14);
-    const camTgt = vGroup.localToWorld(camOff.clone());
-    camera.position.lerp(camTgt, 0.07);
-    camera.lookAt(vGroup.position.x, vGroup.position.y + 1, vGroup.position.z);
+    // Kamera folgt Fahrzeug in Fahrtrichtung
+    const camOffset = new THREE.Vector3(0, 5, -10); // hinter + oben
+    camOffset.applyQuaternion(vGroup.quaternion); // rotiert mit Fahrzeug
+    const targetCamPos = vGroup.position.clone().add(camOffset);
+    camera.position.lerp(targetCamPos, 0.1);
+    camera.lookAt(vGroup.position.clone().add(new THREE.Vector3(0, 1, 0)));
 
   } else {
     // Pedestrian mode
@@ -1383,8 +1406,8 @@ function animate() {
             fwdZ * (1 + Math.random() * 2) + (Math.random()-0.5),
             0.5);
         }
-        // Schnee in Radius 1.5m räumen
-        if (clearSnow(playerPed.position.x, playerPed.position.z, 0.48)) texDirty = true; // 1.25x Figurbreite
+        // Schnee graduell räumen
+        if (clearSnowLine(playerPed.position.x, playerPed.position.z, 0.25, 0.2)) texDirty = true;
         if (shovelAnim <= 0) { playerPed.rotation.z = 0; }
       }
 
