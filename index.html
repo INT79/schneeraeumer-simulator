@@ -270,7 +270,7 @@ const world = new CANNON.World();
 world.gravity.set(0, -9.82, 0);
 world.broadphase = new CANNON.SAPBroadphase(world);
 world.solver.iterations = 10;
-world.allowSleep = true;
+world.allowSleep = false;
 
 const matGround  = new CANNON.Material('gnd');
 const matVehicle = new CANNON.Material('veh');
@@ -1274,20 +1274,22 @@ function animate() {
 
   // ---- Vehicle input ----
   if (!onFoot) {
-    if (keys['KeyW'])     engineForce = Math.min(engineForce + 200*dt, MAX_FORCE);
-    else if (keys['KeyS']) engineForce = Math.max(engineForce - 200*dt, -MAX_FORCE*0.55);
-    else                   engineForce *= 0.90;
+    chassisCannonBody.wakeUp(); // verhindert Sleep-Problem
 
-    if      (keys['KeyA']) steeringVal = Math.min(steeringVal + 1.8*dt, MAX_STEER);
-    else if (keys['KeyD']) steeringVal = Math.max(steeringVal - 1.8*dt, -MAX_STEER);
-    else                   steeringVal *= 0.80;
+    if (keys['KeyW'])     engineForce = Math.min(engineForce + 800*dt, MAX_FORCE);
+    else if (keys['KeyS']) engineForce = Math.max(engineForce - 800*dt, -MAX_FORCE*0.55);
+    else                   engineForce *= 0.85;
 
-    const brake = keys['Space'] ? MAX_BRAKE : 0;
+    if      (keys['KeyA']) steeringVal = Math.min(steeringVal + 2.5*dt, MAX_STEER);
+    else if (keys['KeyD']) steeringVal = Math.max(steeringVal - 2.5*dt, -MAX_STEER);
+    else                   steeringVal *= 0.75;
 
-    rayVehicle.setSteeringValue(steeringVal, 0);
-    rayVehicle.setSteeringValue(steeringVal, 1);
-    rayVehicle.applyEngineForce(engineForce, 2);
-    rayVehicle.applyEngineForce(engineForce, 3);
+    const brake = keys['Space'] ? MAX_BRAKE : (Math.abs(engineForce) < 10 ? 5 : 0);
+
+    rayVehicle.setSteeringValue(-steeringVal, 0);
+    rayVehicle.setSteeringValue(-steeringVal, 1);
+    rayVehicle.applyEngineForce(-engineForce, 2);
+    rayVehicle.applyEngineForce(-engineForce, 3);
     for (let i = 0; i < 4; i++) rayVehicle.setBrake(brake, i);
 
     // Upright stabilisation
@@ -1316,12 +1318,12 @@ function animate() {
     // Snow clearing
     if (brushOn && spd > 0.5) {
       const fwd = chassisCannonBody.vectorToWorldFrame(new CANNON.Vec3(0, 0, 1));
-      const bx  = chassisCannonBody.position.x + fwd.x * 1.85;
-      const bz  = chassisCannonBody.position.z + fwd.z * 1.85;
-      if (clearSnow(bx, bz, 1.85)) texDirty = true;
+      const bx  = chassisCannonBody.position.x + fwd.x * 1.6;
+      const bz  = chassisCannonBody.position.z + fwd.z * 1.6;
+      if (clearSnow(bx, bz, 0.75)) texDirty = true; // exakt Fahrzeugbreite
       // brush particles
       if (Math.random() < 0.4) {
-        spawnParticle(brushPool, bx + (Math.random()-0.5)*2.2, 0.3, bz + (Math.random()-0.5)*2.2,
+        spawnParticle(brushPool, bx + (Math.random()-0.5)*1.5, 0.3, bz + (Math.random()-0.5)*1.5,
           (Math.random()-0.5)*3, Math.random()*2+0.5, (Math.random()-0.5)*3, 0.6);
       }
       brushCyl.rotation.x += 10 * dt;
@@ -1382,7 +1384,7 @@ function animate() {
             0.5);
         }
         // Schnee in Radius 1.5m räumen
-        if (clearSnow(playerPed.position.x, playerPed.position.z, 1.5)) texDirty = true;
+        if (clearSnow(playerPed.position.x, playerPed.position.z, 0.48)) texDirty = true; // 1.25x Figurbreite
         if (shovelAnim <= 0) { playerPed.rotation.z = 0; }
       }
 
