@@ -1,685 +1,1237 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="robots" content="noindex, nofollow">
-  <title>Schneeräumer Simulator</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { overflow: hidden; background: #000; font-family: 'Segoe UI', Arial, sans-serif; }
-    canvas { display: block; }
-    #hud {
-      position: fixed;
-      top: 16px;
-      left: 16px;
-      color: #fff;
-      font-size: 14px;
-      text-shadow: 1px 1px 3px #000;
-      pointer-events: none;
-      z-index: 10;
-    }
-    #hud h2 {
-      font-size: 18px;
-      margin-bottom: 8px;
-      color: #FFD600;
-      letter-spacing: 1px;
-    }
-    #hud .status-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin: 4px 0;
-    }
-    #hud .dot {
-      width: 10px; height: 10px;
-      border-radius: 50%;
-      background: #555;
-      display: inline-block;
-      box-shadow: 0 0 4px #000;
-    }
-    #hud .dot.on { background: #00e676; box-shadow: 0 0 8px #00e676; }
-    #hud .dot.streuer { background: #2979ff; box-shadow: 0 0 8px #2979ff; }
-    #hud .dot.ausgestiegen { background: #ff5252; box-shadow: 0 0 8px #ff5252; }
-    #hud .divider { border-top: 1px solid rgba(255,255,255,0.2); margin: 8px 0; }
-    #controls {
-      position: fixed;
-      bottom: 16px;
-      left: 16px;
-      color: rgba(255,255,255,0.6);
-      font-size: 12px;
-      pointer-events: none;
-      z-index: 10;
-    }
-    #controls span {
-      background: rgba(0,0,0,0.5);
-      border: 1px solid rgba(255,255,255,0.2);
-      border-radius: 4px;
-      padding: 2px 6px;
-      margin-right: 4px;
-    }
-    #daynight {
-      position: fixed;
-      top: 16px;
-      right: 16px;
-      color: #FFD600;
-      font-size: 22px;
-      pointer-events: none;
-      z-index: 10;
-      text-shadow: 0 0 8px #FFD600;
-    }
-    #speedbar {
-      position: fixed;
-      bottom: 16px;
-      right: 16px;
-      width: 120px;
-      pointer-events: none;
-      z-index: 10;
-      color: #fff;
-      font-size: 12px;
-      text-align: right;
-    }
-    #speedbar-fill {
-      height: 8px;
-      background: linear-gradient(90deg, #FFD600, #ff6d00);
-      border-radius: 4px;
-      transition: width 0.1s;
-    }
-    #speedbar-bg {
-      background: rgba(0,0,0,0.5);
-      border-radius: 4px;
-      overflow: hidden;
-      width: 100%;
-      height: 8px;
-      margin-top: 4px;
-    }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>❄ Schneeräum-Simulator V2 – IM NORDEN</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { overflow: hidden; background: #111; font-family: Arial, sans-serif; }
+canvas#gameCanvas { display: block; position: fixed; top: 0; left: 0; }
+
+#hud {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  pointer-events: none; z-index: 10;
+}
+
+#title {
+  position: absolute; top: 14px; left: 14px;
+  color: #FFD600; font-size: 17px; font-weight: bold;
+  text-shadow: 2px 2px 5px rgba(0,0,0,0.9);
+  letter-spacing: 1px;
+}
+
+#status-box {
+  position: absolute; top: 44px; left: 14px;
+  background: rgba(0,0,0,0.55); border-radius: 7px;
+  padding: 8px 13px; color: #fff; font-size: 13px; line-height: 1.8;
+  text-shadow: 1px 1px 2px #000;
+  border: 1px solid rgba(255,255,255,0.12);
+}
+
+#top-right {
+  position: absolute; top: 14px; right: 14px;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
+}
+
+#clock {
+  color: #fff; font-size: 21px; font-weight: bold;
+  text-shadow: 2px 2px 5px rgba(0,0,0,0.9);
+}
+
+#weather-icon { font-size: 26px; }
+
+#minimap-wrap {
+  border: 2px solid rgba(255,255,255,0.35);
+  border-radius: 4px; overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.6);
+}
+
+#minimap { display: block; }
+
+#speedo-wrap {
+  position: absolute; bottom: 14px; right: 14px;
+}
+
+#speedo { display: block; }
+
+#progress-bar {
+  position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
+  background: rgba(0,0,0,0.65); border-radius: 20px;
+  padding: 6px 18px; color: #fff; font-size: 13px;
+  border: 1px solid rgba(255,255,255,0.2);
+  text-shadow: 1px 1px 3px #000;
+}
+
+#controls-box {
+  position: absolute; bottom: 14px; left: 14px;
+  background: rgba(0,0,0,0.55); border-radius: 7px;
+  padding: 8px 12px; color: rgba(255,255,255,0.75);
+  font-size: 11px; line-height: 1.75;
+  border: 1px solid rgba(255,255,255,0.12);
+}
+
+/* Weather panel */
+#weather-panel {
+  position: fixed; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(5,5,25,0.95);
+  border: 2px solid #FFD600; border-radius: 12px;
+  padding: 22px 26px; z-index: 20;
+  display: none; pointer-events: all;
+  min-width: 290px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.7);
+}
+#weather-panel h3 { color: #FFD600; text-align: center; margin-bottom: 14px; font-size: 16px; }
+.w-btn {
+  display: block; width: 100%; padding: 10px 14px;
+  margin: 5px 0; background: rgba(255,255,255,0.08);
+  color: #eee; border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 7px; cursor: pointer; font-size: 14px;
+  text-align: left; transition: background 0.15s;
+}
+.w-btn:hover, .w-btn.active { background: rgba(255,214,0,0.25); border-color: #FFD600; color: #FFD600; }
+#w-close {
+  display: block; margin-top: 12px; color: rgba(255,255,255,0.4);
+  text-align: center; cursor: pointer; font-size: 12px;
+  pointer-events: all;
+}
+</style>
 </head>
 <body>
 
+<canvas id="gameCanvas"></canvas>
+
 <div id="hud">
-  <h2>❄ SCHNEERÄUMER</h2>
-  <div class="status-row"><span class="dot" id="dot-buerste"></span> Bürste (B)</div>
-  <div class="status-row"><span class="dot streuer" id="dot-streuer" style="background:#555;box-shadow:none"></span> Streuer (X)</div>
-  <div class="status-row"><span class="dot ausgestiegen" id="dot-fahrzeug" style="background:#00e676;box-shadow:0 0 8px #00e676"></span> Im Fahrzeug (E)</div>
-  <div class="divider"></div>
-  <div id="hud-speed">Geschwindigkeit: 0 km/h</div>
-  <div id="hud-pos">Position: —</div>
+  <div id="title">❄ SCHNEERÄUMER – IM NORDEN</div>
+  <div id="status-box">
+    <div id="s-brush">🔴 Bürste: AUS</div>
+    <div id="s-spread">🔴 Streuer: AUS</div>
+    <div id="s-mode">🚛 Fahrzeug-Modus</div>
+  </div>
+
+  <div id="top-right">
+    <div id="clock">08:00</div>
+    <div id="weather-icon">🌤</div>
+    <div id="minimap-wrap"><canvas id="minimap" width="150" height="150"></canvas></div>
+  </div>
+
+  <div id="speedo-wrap"><canvas id="speedo" width="160" height="100"></canvas></div>
+
+  <div id="progress-bar">Geräumt: 0%</div>
+
+  <div id="controls-box">
+    W / S &nbsp;—&nbsp; Vor / Zurück<br>
+    A / D &nbsp;—&nbsp; Lenken<br>
+    SPACE &nbsp;—&nbsp; Bremse<br>
+    B &nbsp;—&nbsp; Bürste An/Aus<br>
+    X &nbsp;—&nbsp; Streuer An/Aus<br>
+    E &nbsp;—&nbsp; Aus/Einsteigen<br>
+    F &nbsp;—&nbsp; Schaufel (Fuß)<br>
+    TAB &nbsp;—&nbsp; Wetter
+  </div>
 </div>
 
-<div id="controls">
-  <span>W</span>Vor &nbsp;
-  <span>S</span>Zurück &nbsp;
-  <span>A</span>Links &nbsp;
-  <span>D</span>Rechts &nbsp;
-  <span>B</span>Bürste &nbsp;
-  <span>X</span>Streuer &nbsp;
-  <span>E</span>Ein/Aussteigen
+<div id="weather-panel">
+  <h3>🌦 Wetter wählen</h3>
+  <button class="w-btn" data-w="sunny">☀️ Sonnenschein</button>
+  <button class="w-btn active" data-w="cloudy">🌤 Bewölkt</button>
+  <button class="w-btn" data-w="light">🌨 Leichter Schneefall</button>
+  <button class="w-btn" data-w="heavy">❄️ Starker Schneefall</button>
+  <button class="w-btn" data-w="night">🌙 Nacht + Schneefall</button>
+  <span id="w-close">Schließen (TAB)</span>
 </div>
 
-<div id="daynight">☀️</div>
-
-<div id="speedbar">
-  <div>Tempo</div>
-  <div id="speedbar-bg"><div id="speedbar-fill" style="width:0%"></div></div>
-</div>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://unpkg.com/three@0.152.2/build/three.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
 <script>
-// ─── SCENE SETUP ─────────────────────────────────────────────────────────────
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x87ceeb); // Tageshimmel als Standard
-scene.fog = new THREE.Fog(0x87ceeb, 40, 160);
+'use strict';
+// ================================================================
+//  SCHNEERÄUM-SIMULATOR V2  –  IM NORDEN
+// ================================================================
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+// ---- Renderer ----
+const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gameCanvas'), antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.setPixelRatio(window.devicePixelRatio);
-document.body.appendChild(renderer.domElement);
 
-const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 300);
-camera.position.set(0, 8, 14);
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0xaabbcc, 0.006);
+
+const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 600);
+camera.position.set(0, 10, 18);
 camera.lookAt(0, 0, 0);
 
 window.addEventListener('resize', () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setSize(innerWidth, innerHeight);
 });
 
-// ─── PHYSICS ─────────────────────────────────────────────────────────────────
+// ---- Physics ----
 const world = new CANNON.World();
-world.gravity.set(0, -18, 0);
-world.broadphase = new CANNON.NaiveBroadphase();
+world.gravity.set(0, -9.82, 0);
+world.broadphase = new CANNON.SAPBroadphase(world);
 world.solver.iterations = 10;
+world.allowSleep = true;
 
-// ─── MATERIALS ───────────────────────────────────────────────────────────────
-const groundMat = new CANNON.Material('ground');
-const vehicleMat = new CANNON.Material('vehicle');
-const contact = new CANNON.ContactMaterial(groundMat, vehicleMat, {
-  friction: 0.4, restitution: 0.05
-});
-world.addContactMaterial(contact);
+const matGround  = new CANNON.Material('gnd');
+const matVehicle = new CANNON.Material('veh');
+const contactGV  = new CANNON.ContactMaterial(matGround, matVehicle, { friction: 0.15, restitution: 0.05 });
+world.addContactMaterial(contactGV);
 
-// ─── LIGHTING ────────────────────────────────────────────────────────────────
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
-scene.add(ambientLight);
+// ---- Snow Grid ----
+const GRID  = 50;
+const MSIZE = 300;
+const CELL  = MSIZE / GRID;
+const snowGrid = new Float32Array(GRID * GRID).fill(1);
 
-const sunLight = new THREE.DirectionalLight(0xffd98e, 1.2);
-sunLight.position.set(40, 60, 20);
+const snowCvs = document.createElement('canvas');
+snowCvs.width = snowCvs.height = 512;
+const snowCtx = snowCvs.getContext('2d');
+const snowTex = new THREE.CanvasTexture(snowCvs);
+
+function rebuildSnowTex() {
+  const cw = 512 / GRID;
+  for (let i = 0; i < GRID; i++) {
+    for (let j = 0; j < GRID; j++) {
+      const v = snowGrid[i * GRID + j];
+      const r = Math.round(42  + v * 200);
+      const g = Math.round(42  + v * 202);
+      const b = Math.round(42  + v * 207);
+      snowCtx.fillStyle = `rgb(${r},${g},${b})`;
+      snowCtx.fillRect(i * cw, j * cw, cw + 1, cw + 1);
+    }
+  }
+  snowTex.needsUpdate = true;
+}
+rebuildSnowTex();
+
+// ---- Ground ----
+const groundGeo = new THREE.PlaneGeometry(MSIZE, MSIZE);
+const groundMat = new THREE.MeshLambertMaterial({ map: snowTex });
+const groundMesh = new THREE.Mesh(groundGeo, groundMat);
+groundMesh.rotation.x = -Math.PI / 2;
+groundMesh.receiveShadow = true;
+scene.add(groundMesh);
+
+const gBody = new CANNON.Body({ mass: 0, material: matGround });
+gBody.addShape(new CANNON.Plane());
+gBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1,0,0), -Math.PI/2);
+world.addBody(gBody);
+
+// ---- Lighting ----
+const ambLight = new THREE.AmbientLight(0xffffff, 0.55);
+scene.add(ambLight);
+
+const sunLight = new THREE.DirectionalLight(0xfff4e0, 1.0);
+sunLight.position.set(60, 90, 40);
 sunLight.castShadow = true;
-sunLight.shadow.camera.near = 0.5;
-sunLight.shadow.camera.far = 300;
-sunLight.shadow.camera.left = -80;
-sunLight.shadow.camera.right = 80;
-sunLight.shadow.camera.top = 80;
-sunLight.shadow.camera.bottom = -80;
-sunLight.shadow.mapSize.width = 2048;
-sunLight.shadow.mapSize.height = 2048;
+sunLight.shadow.mapSize.set(2048, 2048);
+sunLight.shadow.camera.near   = 1;
+sunLight.shadow.camera.far    = 400;
+sunLight.shadow.camera.left   = -160;
+sunLight.shadow.camera.right  =  160;
+sunLight.shadow.camera.top    =  160;
+sunLight.shadow.camera.bottom = -160;
 scene.add(sunLight);
 
-// ─── GROUND / SNOW ───────────────────────────────────────────────────────────
-function makeSnowGround() {
-  const geo = new THREE.PlaneGeometry(200, 200, 80, 80);
-  const pos = geo.attributes.position;
-  for (let i = 0; i < pos.count; i++) {
-    pos.setZ(i, pos.getZ(i) + (Math.random() - 0.5) * 0.12);
-  }
-  geo.computeVertexNormals();
-  const mat = new THREE.MeshLambertMaterial({ color: 0xeef4ff });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.rotation.x = -Math.PI / 2;
-  mesh.receiveShadow = true;
-  scene.add(mesh);
-
-  const body = new CANNON.Body({ mass: 0, material: groundMat });
-  body.addShape(new CANNON.Plane());
-  body.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
-  world.addBody(body);
-}
-makeSnowGround();
-
-// ─── ROADS ───────────────────────────────────────────────────────────────────
-function addRoad(x, z, w, d) {
-  const geo = new THREE.BoxGeometry(w, 0.08, d);
-  const mat = new THREE.MeshLambertMaterial({ color: 0x333344 });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.position.set(x, 0.04, z);
-  mesh.receiveShadow = true;
-  scene.add(mesh);
-}
-
-// Main road (along Z)
-addRoad(0, 0, 10, 180);
-// Cross road (along X)
-addRoad(0, 20, 180, 10);
-addRoad(0, -20, 180, 10);
-addRoad(0, 60, 180, 10);
-addRoad(0, -60, 180, 10);
-
-// ─── SIDEWALKS ───────────────────────────────────────────────────────────────
-function addSidewalk(x, z, w, d) {
-  const geo = new THREE.BoxGeometry(w, 0.12, d);
-  const mat = new THREE.MeshLambertMaterial({ color: 0xbbccdd });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.position.set(x, 0.05, z);
-  mesh.receiveShadow = true;
-  scene.add(mesh);
-}
-
-addSidewalk(7, 0, 3, 180);
-addSidewalk(-7, 0, 3, 180);
-addSidewalk(0, 25, 180, 3);
-addSidewalk(0, -25, 180, 3);
-
-// ─── HOUSES ──────────────────────────────────────────────────────────────────
-const houseColors = [0xee8844, 0x8899bb, 0xcc6655, 0x779966, 0xaa7755, 0x667799];
-function addHouse(x, z, w, h, d, colorIdx) {
-  // Body
-  const geo = new THREE.BoxGeometry(w, h, d);
-  const mat = new THREE.MeshLambertMaterial({ color: houseColors[colorIdx % houseColors.length] });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.position.set(x, h / 2, z);
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
-  scene.add(mesh);
-
-  // Snowy roof
-  const roofGeo = new THREE.BoxGeometry(w + 0.4, 0.25, d + 0.4);
-  const roofMat = new THREE.MeshLambertMaterial({ color: 0xddeeff });
-  const roof = new THREE.Mesh(roofGeo, roofMat);
-  roof.position.set(x, h + 0.12, z);
-  scene.add(roof);
-
-  // Roof ridge
-  const ridgeGeo = new THREE.CylinderGeometry(0.15, 0.15, w + 0.6, 6);
-  const ridgeMat = new THREE.MeshLambertMaterial({ color: 0x445566 });
-  const ridge = new THREE.Mesh(ridgeGeo, ridgeMat);
-  ridge.position.set(x, h + 0.5, z);
-  ridge.rotation.z = Math.PI / 2;
-  scene.add(ridge);
-
-  // Cannon body
-  const body = new CANNON.Body({ mass: 0, material: groundMat });
-  body.addShape(new CANNON.Box(new CANNON.Vec3(w / 2, h / 2, d / 2)));
-  body.position.set(x, h / 2, z);
-  world.addBody(body);
-}
-
-const houseLayout = [
-  [14, -50, 8, 5, 10, 0],
-  [14, -36, 7, 4, 8, 1],
-  [14, -10, 9, 6, 10, 2],
-  [14, 5, 7, 4, 8, 3],
-  [14, 35, 8, 5, 10, 4],
-  [14, 48, 10, 7, 12, 5],
-  [-14, -50, 8, 5, 10, 2],
-  [-14, -36, 7, 4, 8, 3],
-  [-14, -10, 9, 6, 10, 0],
-  [-14, 5, 7, 4, 8, 4],
-  [-14, 35, 8, 5, 10, 1],
-  [-14, 48, 10, 7, 12, 5],
-  [30, 20, 8, 5, 10, 3],
-  [-30, 20, 7, 4, 8, 0],
-  [30, -20, 9, 6, 10, 1],
-  [-30, -20, 8, 5, 10, 4],
-];
-houseLayout.forEach((h, i) => addHouse(...h));
-
-// ─── STREETLIGHTS ─────────────────────────────────────────────────────────────
-const streetlamps = [];
-function addLamp(x, z) {
-  const pole = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.08, 0.1, 5, 8),
-    new THREE.MeshLambertMaterial({ color: 0x555566 })
+// ================================================================
+//  HELPERS
+// ================================================================
+function box(w, h, d, color, px, py, pz, ry = 0) {
+  const m = new THREE.Mesh(
+    new THREE.BoxGeometry(w, h, d),
+    new THREE.MeshLambertMaterial({ color })
   );
-  pole.position.set(x, 2.5, z);
-  pole.castShadow = true;
-  scene.add(pole);
-
-  const head = new THREE.Mesh(
-    new THREE.SphereGeometry(0.3, 8, 6),
-    new THREE.MeshBasicMaterial({ color: 0xffffcc })
+  m.position.set(px, py, pz);
+  m.rotation.y = ry;
+  m.castShadow = m.receiveShadow = true;
+  return m;
+}
+function cyl(rt, rb, h, seg, color, px, py, pz, rx = 0, rz = 0) {
+  const m = new THREE.Mesh(
+    new THREE.CylinderGeometry(rt, rb, h, seg),
+    new THREE.MeshLambertMaterial({ color })
   );
-  head.position.set(x, 5.3, z);
-  scene.add(head);
-
-  const light = new THREE.PointLight(0xffffaa, 0.8, 18);
-  light.position.set(x, 5.2, z);
-  scene.add(light);
-  streetlamps.push(light);
+  m.position.set(px, py, pz);
+  m.rotation.x = rx; m.rotation.z = rz;
+  m.castShadow = true;
+  return m;
 }
 
-for (let z = -70; z <= 80; z += 20) {
-  addLamp(8.5, z);
-  addLamp(-8.5, z);
+// ================================================================
+//  MAP — STRASSEN, GEHWEGE, MARKIERUNGEN
+// ================================================================
+const COL_ROAD = 0x2e2e2e;
+const COL_SIDE = 0xb0b0b0;
+const COL_SNOW = 0xe8eef4;
+const COL_GRASS = 0x3a6030;
+
+function addPlane(w, d, color, px, py, pz) {
+  const m = new THREE.Mesh(
+    new THREE.PlaneGeometry(w, d),
+    new THREE.MeshLambertMaterial({ color })
+  );
+  m.rotation.x = -Math.PI / 2;
+  m.position.set(px, py, pz);
+  m.receiveShadow = true;
+  scene.add(m);
+  return m;
 }
 
-// ─── SNOW PARTICLES (decorative background) ───────────────────────────────────
-const snowGeo = new THREE.BufferGeometry();
-const snowCount = 1800;
-const snowPos = new Float32Array(snowCount * 3);
-for (let i = 0; i < snowCount * 3; i += 3) {
-  snowPos[i]     = (Math.random() - 0.5) * 100;
-  snowPos[i + 1] = Math.random() * 20;
-  snowPos[i + 2] = (Math.random() - 0.5) * 100;
-}
-snowGeo.setAttribute('position', new THREE.BufferAttribute(snowPos, 3));
-const snowMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.18, transparent: true, opacity: 0.85 });
-const snowParticles = new THREE.Points(snowGeo, snowMat);
-scene.add(snowParticles);
+// Main street (N-S along Z, x=0)
+addPlane(7, 200, COL_ROAD,  0, 0.01, 0);
+// Sidewalks left / right
+addPlane(2.5, 200, COL_SIDE, -5.25, 0.05, 0);
+addPlane(2.5, 200, COL_SIDE,  5.25, 0.05, 0);
 
-// ─── VEHICLE ─────────────────────────────────────────────────────────────────
-const vehicleGroup = new THREE.Group();
-scene.add(vehicleGroup);
+// Grass behind sidewalks
+addPlane(50, 200, COL_GRASS, -35, 0.01, 0);
+addPlane(50, 200, COL_GRASS,  35, 0.01, 0);
 
-// Body
-const bodyMesh = new THREE.Mesh(
-  new THREE.BoxGeometry(2.2, 1.0, 3.8),
-  new THREE.MeshLambertMaterial({ color: 0xFFD600 })
-);
-bodyMesh.castShadow = true;
-bodyMesh.position.y = 0.2;
-vehicleGroup.add(bodyMesh);
-
-// Cab
-const cabMesh = new THREE.Mesh(
-  new THREE.BoxGeometry(2.0, 0.85, 1.8),
-  new THREE.MeshLambertMaterial({ color: 0xFFD600 })
-);
-cabMesh.position.set(0, 1.0, -0.5);
-cabMesh.castShadow = true;
-vehicleGroup.add(cabMesh);
-
-// Windscreen (tinted glass)
-const wsMesh = new THREE.Mesh(
-  new THREE.BoxGeometry(1.8, 0.55, 0.05),
-  new THREE.MeshLambertMaterial({ color: 0x88aacc, transparent: true, opacity: 0.5 })
-);
-wsMesh.position.set(0, 1.15, -1.4);
-vehicleGroup.add(wsMesh);
-
-// Wheels
-const wheelGeo = new THREE.CylinderGeometry(0.38, 0.38, 0.28, 12);
-const wheelMat = new THREE.MeshLambertMaterial({ color: 0x222222 });
-const wheelPositions = [[1.25, 0, 1.2], [-1.25, 0, 1.2], [1.25, 0, -1.3], [-1.25, 0, -1.3]];
-const wheels = [];
-wheelPositions.forEach(pos => {
-  const w = new THREE.Mesh(wheelGeo, wheelMat);
-  w.rotation.z = Math.PI / 2;
-  w.position.set(...pos);
-  w.castShadow = true;
-  vehicleGroup.add(w);
-  wheels.push(w);
+// Cross streets (E-W)
+const csZ = [-75, -35, 10, 52];
+csZ.forEach(z => {
+  addPlane(120, 6, COL_ROAD,   0, 0.015, z);
+  addPlane(120, 2.5, COL_SIDE, 0, 0.055, z - 4.25);
+  addPlane(120, 2.5, COL_SIDE, 0, 0.055, z + 4.25);
 });
 
-// Plow blade (Bürste/Pflugschild)
-const plowGroup = new THREE.Group();
-const plowMesh = new THREE.Mesh(
-  new THREE.BoxGeometry(2.6, 0.55, 0.18),
-  new THREE.MeshLambertMaterial({ color: 0xff6600 })
-);
-plowMesh.position.set(0, 0.1, 2.15);
-plowGroup.add(plowMesh);
-const plowBrace = new THREE.Mesh(
-  new THREE.BoxGeometry(0.12, 0.35, 0.6),
-  new THREE.MeshLambertMaterial({ color: 0x888888 })
-);
-plowBrace.position.set(0, 0, 1.85);
-plowGroup.add(plowBrace);
-vehicleGroup.add(plowGroup);
-plowGroup.visible = false;
-
-// Spreader (Streuer) - back
-const spreaderGroup = new THREE.Group();
-const spreaderMesh = new THREE.Mesh(
-  new THREE.CylinderGeometry(0.35, 0.55, 0.7, 10),
-  new THREE.MeshLambertMaterial({ color: 0x333388 })
-);
-spreaderMesh.position.set(0, 0.45, -2.0);
-spreaderGroup.add(spreaderMesh);
-vehicleGroup.add(spreaderGroup);
-spreaderGroup.visible = false;
-
-// Beacon light (Rundumleuchte)
-const beaconMesh = new THREE.Mesh(
-  new THREE.SphereGeometry(0.18, 8, 6),
-  new THREE.MeshBasicMaterial({ color: 0xffaa00 })
-);
-beaconMesh.position.set(0, 1.55, -0.5);
-vehicleGroup.add(beaconMesh);
-
-// ─── PHYSICS BODY FOR VEHICLE ─────────────────────────────────────────────────
-const vehicleBody = new CANNON.Body({ mass: 1200, material: vehicleMat });
-vehicleBody.addShape(new CANNON.Box(new CANNON.Vec3(1.1, 0.6, 2.0)));
-vehicleBody.position.set(0, 1.2, 0);
-vehicleBody.linearDamping = 0.6;
-vehicleBody.angularDamping = 0.98;
-world.addBody(vehicleBody);
-
-// ─── STREUER PARTICLES ────────────────────────────────────────────────────────
-const streuerGeo = new THREE.BufferGeometry();
-const maxStreuerParticles = 200;
-const sPositions = new Float32Array(maxStreuerParticles * 3);
-const sVelocities = [];
-for (let i = 0; i < maxStreuerParticles; i++) {
-  sPositions[i * 3] = 1000; sPositions[i * 3 + 1] = 0; sPositions[i * 3 + 2] = 0;
-  sVelocities.push({ x: 0, y: 0, z: 0, life: 0, maxLife: 0 });
+// Dashed centre line — main street
+for (let z = -97; z < 98; z += 8) {
+  const m = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.18, 4),
+    new THREE.MeshLambertMaterial({ color: 0xffffff })
+  );
+  m.rotation.x = -Math.PI / 2;
+  m.position.set(0, 0.02, z);
+  scene.add(m);
 }
-streuerGeo.setAttribute('position', new THREE.BufferAttribute(sPositions, 3));
-const streuerMat = new THREE.PointsMaterial({ color: 0xffdd88, size: 0.12, transparent: true, opacity: 0.9 });
-const streuerParticles = new THREE.Points(streuerGeo, streuerMat);
-scene.add(streuerParticles);
+// Dashed lines — cross streets
+csZ.forEach(z => {
+  for (let x = -57; x < 57; x += 8) {
+    const m = new THREE.Mesh(
+      new THREE.PlaneGeometry(4, 0.18),
+      new THREE.MeshLambertMaterial({ color: 0xffffff })
+    );
+    m.rotation.x = -Math.PI / 2;
+    m.position.set(x, 0.02, z);
+    scene.add(m);
+  }
+});
 
-// ─── PLAYER ON FOOT (when exited vehicle) ─────────────────────────────────────
-const playerMesh = new THREE.Mesh(
-  new THREE.CylinderGeometry(0.3, 0.3, 1.6, 8),
-  new THREE.MeshLambertMaterial({ color: 0x2255aa })
+// Curbs (Bordstein) — slight raised edge
+function addCurb(w, d, px, pz) {
+  const m = box(w, 0.12, d, 0x999999, px, 0.06, pz);
+  scene.add(m);
+}
+// Along main street
+addCurb(0.15, 200, -4, 0);
+addCurb(0.15, 200,  4, 0);
+
+// ================================================================
+//  BUILDINGS
+// ================================================================
+const bColors = [0xf4f0e4, 0xd3d3d3, 0xf0e4b8, 0xce8060, 0xcc5555];
+
+const lanterns = [];
+
+function addBuilding(cx, cz, w, d, h, ci, saddle) {
+  const g = new THREE.Group();
+  const col = bColors[ci % bColors.length];
+
+  // Body
+  const body = box(w, h, d, col, 0, h/2, 0);
+  g.add(body);
+
+  // Fenster
+  const wMat = new THREE.MeshLambertMaterial({ color: 0x90c8e8, transparent: true, opacity: 0.75 });
+  const rowCount = Math.max(1, Math.floor((h-1) / 2.5));
+  const colCount = Math.max(1, Math.floor((w-1) / 2.5));
+  for (let r = 0; r < rowCount; r++) {
+    for (let c = 0; c < colCount; c++) {
+      const wg = new THREE.BoxGeometry(0.75, 0.65, 0.05);
+      const wm = new THREE.Mesh(wg, wMat);
+      wm.position.set(-w/2 + 1.0 + c*2.5, 1.2 + r*2.5, d/2 + 0.01);
+      g.add(wm);
+    }
+  }
+
+  // Dach
+  if (saddle) {
+    const rGeo = new THREE.CylinderGeometry(0, w*0.55, 2.5, 4);
+    const rMat = new THREE.MeshLambertMaterial({ color: 0x8b4010 });
+    const rMesh = new THREE.Mesh(rGeo, rMat);
+    rMesh.position.set(0, h + 1.25, 0);
+    rMesh.rotation.y = Math.PI/4;
+    rMesh.castShadow = true;
+    g.add(rMesh);
+    // snow on roof edge
+    const sm = box(w + 0.2, 0.15, d + 0.2, COL_SNOW, 0, h + 0.08, 0);
+    g.add(sm);
+  } else {
+    const sm = box(w + 0.15, 0.2, d + 0.15, COL_SNOW, 0, h + 0.1, 0);
+    g.add(sm);
+  }
+
+  // Treppenstufen
+  for (let s = 0; s < 2; s++) {
+    const st = box(1.4, 0.12*(s+1), 0.28*(s+1), 0x999999, 0, 0.06*(s+1), d/2 + 0.14*(s+1));
+    g.add(st);
+  }
+
+  g.position.set(cx, 0, cz);
+  scene.add(g);
+
+  // Physics
+  const bb = new CANNON.Body({ mass: 0 });
+  bb.addShape(new CANNON.Box(new CANNON.Vec3(w/2, h/2, d/2)));
+  bb.position.set(cx, h/2, cz);
+  world.addBody(bb);
+}
+
+const BLDGS = [
+  // left side (negative x)
+  [-18, -88, 8, 10, 6, 0, true],  [-18, -73, 8, 10, 6, 1, false],
+  [-18, -56, 8, 10, 6, 2, true],  [-22, -22, 15, 12, 10, 3, false],
+  [-18,   4, 8, 10, 6, 4, true],  [-18,  20, 8, 10, 6, 0, false],
+  [-18,  36, 8, 10, 6, 1, true],  [-22,  62, 15, 12, 10, 2, false],
+  [-18,  80, 8, 10, 6, 3, true],  [-18,  93, 8, 10, 6, 4, false],
+  [-34, -55, 15, 12, 10, 1, false],[-34,  30, 15, 12, 10, 0, false],
+  // right side (positive x)
+  [18, -82, 8, 10, 6, 2, true],   [18, -66, 8, 10, 6, 3, false],
+  [22, -48, 15, 12, 10, 4, false], [18, -13, 8, 10, 6, 0, true],
+  [18,   6, 8, 10, 6, 1, false],  [18,  22, 8, 10, 6, 2, true],
+  [18,  42, 8, 10, 6, 3, false],  [18,  60, 8, 10, 6, 4, true],
+  [22,  78, 15, 12, 10, 0, false], [34, -72, 15, 12, 10, 3, false],
+  [34,  14, 15, 12, 10, 1, false], [34,  68, 8, 10, 6, 2, true],
+];
+BLDGS.forEach(b => addBuilding(...b));
+
+// ================================================================
+//  STATIC OBJECTS
+// ================================================================
+
+// --- Laternen ---
+function addLantern(px, pz) {
+  const g = new THREE.Group();
+  const pole = cyl(0.06, 0.06, 5.5, 8, 0x555555, 0, 2.75, 0);
+  g.add(pole);
+  const arm  = box(0.6, 0.06, 0.06, 0x555555, 0.3, 5.55, 0);
+  g.add(arm);
+  const head = box(0.3, 0.2, 0.3, 0xffee88, 0.6, 5.6, 0);
+  g.add(head);
+  const pl = new THREE.PointLight(0xffcc55, 0, 18);
+  pl.position.set(0.6, 5.55, 0);
+  g.add(pl);
+  g.position.set(px, 0, pz);
+  g.userData.pointLight = pl;
+  scene.add(g);
+  lanterns.push(g);
+}
+for (let z = -100; z <= 100; z += 25) { addLantern(-5.8, z); }
+for (let z = -87; z <= 100; z += 25)  { addLantern(5.8, z); }
+
+// --- Poller ---
+function addBollard(px, pz) {
+  const g = new THREE.Group();
+  g.add(cyl(0.1, 0.1, 0.85, 8, 0x222222, 0, 0.425, 0));
+  g.add(cyl(0.115, 0.115, 0.12, 8, 0xFFD600, 0, 0.72, 0));
+  g.position.set(px, 0, pz);
+  scene.add(g);
+}
+for (let z = -100; z <= 100; z += 20) {
+  addBollard(-6.4, z);
+  addBollard(6.4, z);
+}
+
+// --- Stromkästen ---
+function addElecBox(px, pz) {
+  const m = box(0.5, 1.2, 0.5, 0x2e7a2e, px, 0.6, pz);
+  scene.add(m);
+}
+addElecBox(-6.2, -32); addElecBox(6.2, 18); addElecBox(-6.2, 62);
+
+// --- Bäume ---
+function addTree(px, pz) {
+  const g = new THREE.Group();
+  g.add(cyl(0.22, 0.28, 2.2, 8, 0x5c3010, 0, 1.1, 0));
+  const foliage = new THREE.Mesh(
+    new THREE.SphereGeometry(1.6, 8, 8),
+    new THREE.MeshLambertMaterial({ color: 0x2c5e20 })
+  );
+  foliage.position.set(0, 3.4, 0);
+  foliage.castShadow = true;
+  g.add(foliage);
+  // Snow cap
+  const sc = new THREE.Mesh(
+    new THREE.SphereGeometry(1.1, 8, 6, 0, Math.PI*2, 0, Math.PI*0.4),
+    new THREE.MeshLambertMaterial({ color: COL_SNOW })
+  );
+  sc.position.set(0, 4.4, 0);
+  g.add(sc);
+  g.position.set(px, 0, pz);
+  scene.add(g);
+}
+[[-8,-92],[-8,-62],[-8,-30],[-8,28],[-8,64],[-8,90],
+ [8,-80],[8,-48],[8,-12],[8,20],[8,56],[8,85],
+ [-52,-60],[-52,22],[52,-42],[52,58]].forEach(([x,z]) => addTree(x,z));
+
+// --- Zäune ---
+function addFence(x1,z1,x2,z2,segs) {
+  const dx = (x2-x1)/segs, dz = (z2-z1)/segs;
+  for (let i = 0; i <= segs; i++) {
+    const m = box(0.07, 1.1, 0.07, 0x888888, x1+dx*i, 0.55, z1+dz*i);
+    scene.add(m);
+  }
+  const len = Math.hypot(x2-x1, z2-z1);
+  const ay  = Math.atan2(z2-z1, x2-x1);
+  for (let h = 0; h < 2; h++) {
+    const bar = box(len, 0.05, 0.05, 0x888888, (x1+x2)/2, 0.4+h*0.5, (z1+z2)/2, -ay);
+    scene.add(bar);
+  }
+}
+addFence(-10,-94,-10,-46,5); addFence(10,-88,-10,-40,5);
+addFence(-10,  2,-10, 44,4); addFence(10, 12, 10, 54,4);
+
+// --- Schilder ---
+function addSign(px, pz, type) {
+  const g = new THREE.Group();
+  g.add(cyl(0.04, 0.04, 2.5, 8, 0x888888, 0, 1.25, 0));
+  if (type === 'stop') {
+    const sm = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.28, 0.28, 0.04, 8),
+      new THREE.MeshLambertMaterial({ color: 0xcc0000 })
+    );
+    sm.rotation.x = Math.PI/2; sm.position.set(0, 2.5, 0);
+    g.add(sm);
+  } else {
+    const sm = new THREE.Mesh(
+      new THREE.ConeGeometry(0.28, 0.45, 3),
+      new THREE.MeshLambertMaterial({ color: 0xffffff })
+    );
+    sm.position.set(0, 2.6, 0); g.add(sm);
+  }
+  g.position.set(px, 0, pz);
+  scene.add(g);
+}
+csZ.forEach(z => { addSign(-3.5, z+3, 'stop'); addSign(3.5, z-3, 'warn'); });
+
+// --- Mülleimer ---
+function addTrash(px, pz) {
+  const m = cyl(0.18, 0.16, 0.7, 8, 0x333333, px, 0.35, pz);
+  scene.add(m);
+}
+addTrash(-9,-44); addTrash(9,33); addTrash(-9,64); addTrash(9,-74);
+
+// --- Auffahrten (Pflasteroptik) ---
+function addDriveway(px, pz, w, d) {
+  const m = box(w, 0.08, d, 0xc0c0c0, px, 0.04, pz);
+  scene.add(m);
+}
+addDriveway(-11,-68,3,5); addDriveway(11,-55,3,5);
+addDriveway(-11,  8,3,5); addDriveway(11, 22,3,5);
+
+// ================================================================
+//  PARKENDE AUTOS
+// ================================================================
+const pCarColors = [0xc0c0c0, 0x888888, 0x222222, 0xcc2222, 0x2244bb, 0x3d7a3d];
+
+function addParkedCar(px, pz, ry, ci) {
+  const col = pCarColors[ci % pCarColors.length];
+  const g   = new THREE.Group();
+
+  // Lower body
+  const lb = box(1.7, 0.65, 3.9, col, 0, 0.65, 0);
+  g.add(lb);
+  // Cabin
+  const cab = box(1.5, 0.65, 2.1, col, 0, 1.35, -0.3);
+  g.add(cab);
+  // Windshield
+  const wsM = new THREE.MeshLambertMaterial({ color: 0x88aacc, transparent: true, opacity: 0.55 });
+  const wsG = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.48, 0.05), wsM);
+  wsG.position.set(0, 1.4, 0.76); wsG.rotation.x = 0.25;
+  g.add(wsG);
+  // Wheels
+  [[-0.88, 0.3, 1.25],[0.88, 0.3, 1.25],[-0.88, 0.3,-1.25],[0.88, 0.3,-1.25]].forEach(([x,y,z]) => {
+    const wh = cyl(0.27, 0.27, 0.2, 12, 0x222222, x, y, z, 0, Math.PI/2);
+    g.add(wh);
+  });
+  // Snow on roof
+  const snw = box(1.4, 0.1, 2.0, COL_SNOW, 0, 1.72, -0.3);
+  g.add(snw);
+
+  g.position.set(px, 0, pz);
+  g.rotation.y = ry;
+  scene.add(g);
+
+  const cb = new CANNON.Body({ mass: 0 });
+  cb.addShape(new CANNON.Box(new CANNON.Vec3(0.85, 0.65, 1.95)));
+  cb.position.set(px, 0.65, pz);
+  cb.quaternion.setFromAxisAngle(new CANNON.Vec3(0,1,0), ry);
+  world.addBody(cb);
+}
+
+[
+  [-9.5,-87,0,0],[-9.5,-75,0,2],[-9.5,-60,0,1],[-9.5,-30,0,4],
+  [-9.5, 18,0,3],[-9.5, 44,0,0],[-9.5, 71,0,5],
+  [9.5,-80,Math.PI,1],[9.5,-52,Math.PI,4],[9.5,-18,Math.PI,2],
+  [9.5,  7,Math.PI,0],[9.5, 34,Math.PI,3],[9.5, 66,Math.PI,1],[9.5, 87,Math.PI,5],
+].forEach(([x,z,r,c]) => addParkedCar(x,z,r,c));
+
+// ================================================================
+//  PLAYER VEHICLE (Ladog T1150)
+// ================================================================
+const vGroup = new THREE.Group();
+scene.add(vGroup);
+
+// Chassis body
+const chBody = box(1.5, 1.0, 3.0, 0xFFD600, 0, 0.5, 0);
+vGroup.add(chBody);
+
+// Cabin
+const cabin = box(1.4, 0.9, 1.6, 0xFFD600, 0, 1.4, 0.3);
+vGroup.add(cabin);
+
+// Windshield
+const wsMat = new THREE.MeshLambertMaterial({ color: 0x88ccff, transparent: true, opacity: 0.45 });
+const wsMesh = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.65, 0.05), wsMat);
+wsMesh.position.set(0, 1.45, 1.15); wsMesh.rotation.x = -0.18;
+vGroup.add(wsMesh);
+
+// Logo on cabin
+const logoCvs = document.createElement('canvas');
+logoCvs.width = 256; logoCvs.height = 64;
+const logoCtx = logoCvs.getContext('2d');
+logoCtx.fillStyle = '#FFD600';
+logoCtx.fillRect(0,0,256,64);
+logoCtx.fillStyle = '#000';
+logoCtx.font = 'bold 22px Arial';
+logoCtx.textAlign = 'center';
+logoCtx.fillText('IM NORDEN', 128, 42);
+const logoTex = new THREE.CanvasTexture(logoCvs);
+const logoMesh = new THREE.Mesh(
+  new THREE.BoxGeometry(0.95, 0.22, 0.04),
+  new THREE.MeshLambertMaterial({ map: logoTex })
 );
-playerMesh.castShadow = true;
-scene.add(playerMesh);
-playerMesh.visible = false;
+logoMesh.position.set(0, 2.0, 1.1);
+vGroup.add(logoMesh);
 
-const playerBody = new CANNON.Body({ mass: 70, material: vehicleMat });
-playerBody.addShape(new CANNON.Sphere(0.4));
-playerBody.position.set(3, 1.5, 0);
-playerBody.linearDamping = 0.92;
-playerBody.angularDamping = 1.0;
-world.addBody(playerBody);
+// Beacon
+const beaconG = new THREE.Group();
+beaconG.add(cyl(0.1, 0.1, 0.14, 8, 0x444444, 0, 0, 0));
+const beaconDome = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.14, 0.05, 0.18, 8),
+  new THREE.MeshLambertMaterial({ color: 0xFF6600, emissive: new THREE.Color(0xFF2200), emissiveIntensity: 0.5 })
+);
+beaconDome.position.set(0, 0.17, 0);
+beaconG.add(beaconDome);
+beaconG.position.set(0, 2.32, 0.15);
+vGroup.add(beaconG);
 
-// ─── STATE ────────────────────────────────────────────────────────────────────
+// Brush (front)
+const brushG = new THREE.Group();
+const brushCyl = cyl(0.22, 0.22, 2.2, 14, 0xFF6600, 0, 0, 0, 0, Math.PI/2);
+brushG.add(brushCyl);
+brushG.position.set(0, 0.55, 1.65);
+vGroup.add(brushG);
+
+// Spreader (rear)
+const spreaderMesh = box(1.1, 0.58, 0.5, 0x888888, 0, 0.55, -1.65);
+vGroup.add(spreaderMesh);
+
+// Wheels
+const vWheels = [];
+[[-0.8,0.35,1.0],[0.8,0.35,1.0],[-0.8,0.35,-1.0],[0.8,0.35,-1.0]].forEach(([x,y,z]) => {
+  const w = cyl(0.33, 0.33, 0.28, 16, 0x222222, x, y, z, 0, Math.PI/2);
+  vGroup.add(w);
+  vWheels.push(w);
+  const hub = cyl(0.14, 0.14, 0.29, 8, 0x777777, x, y, z, 0, Math.PI/2);
+  vGroup.add(hub);
+});
+
+// Headlights
+const headL = new THREE.SpotLight(0xffffff, 0, 30, Math.PI/6, 0.3);
+headL.position.set(-0.5, 1.0, 1.8);
+vGroup.add(headL);
+const headR = new THREE.SpotLight(0xffffff, 0, 30, Math.PI/6, 0.3);
+headR.position.set(0.5, 1.0, 1.8);
+vGroup.add(headR);
+
+// ================================================================
+//  VEHICLE PHYSICS
+// ================================================================
+const chassisCannonBody = new CANNON.Body({ mass: 900, material: matVehicle });
+chassisCannonBody.addShape(new CANNON.Box(new CANNON.Vec3(0.75, 0.5, 1.5)));
+chassisCannonBody.position.set(0, 2.5, -20);
+chassisCannonBody.linearDamping  = 0.35;
+chassisCannonBody.angularDamping = 0.65;
+world.addBody(chassisCannonBody);
+
+const rayVehicle = new CANNON.RaycastVehicle({
+  chassisBody: chassisCannonBody,
+  indexRightAxis:   0,
+  indexUpAxis:      1,
+  indexForwardAxis: 2,
+});
+
+const wOpts = {
+  radius:              0.33,
+  directionLocal:      new CANNON.Vec3(0, -1, 0),
+  suspensionStiffness: 28,
+  suspensionRestLength: 0.35,
+  frictionSlip:        1.3,
+  dampingRelaxation:   2.2,
+  dampingCompression:  4.0,
+  maxSuspensionForce:  100000,
+  rollInfluence:       0.01,
+  axleLocal:           new CANNON.Vec3(-1, 0, 0),
+  maxSuspensionTravel: 0.3,
+  customSlidingRotationalSpeed: -30,
+  useCustomSlidingRotationalSpeed: true,
+};
+
+const wConns = [
+  new CANNON.Vec3(-0.8, 0, 1.0),
+  new CANNON.Vec3( 0.8, 0, 1.0),
+  new CANNON.Vec3(-0.8, 0,-1.0),
+  new CANNON.Vec3( 0.8, 0,-1.0),
+];
+wConns.forEach(pos => {
+  rayVehicle.addWheel({ ...wOpts, chassisConnectionPointLocal: pos });
+});
+rayVehicle.addToWorld(world);
+
+// Vehicle state
+let engineForce = 0, steeringVal = 0;
+const MAX_FORCE   = 2800;
+const MAX_STEER   = 0.44;
+const MAX_BRAKE   = 90;
+
+// ================================================================
+//  NPC CARS
+// ================================================================
+const npcs = [];
+const npcColors = [0xaa3333, 0x3355aa, 0x338833, 0xaa8833, 0x663366];
+
+function spawnNPC(px, pz, dir, spd) {
+  const col = npcColors[Math.floor(Math.random()*npcColors.length)];
+  const g = new THREE.Group();
+  g.add(box(1.6, 0.65, 3.4, col, 0, 0.65, 0));
+  g.add(box(1.45, 0.6, 1.75, col, 0, 1.33, -0.2));
+  g.position.set(px, 0, pz);
+  scene.add(g);
+  npcs.push({ mesh: g, dir, spd, lane: px, minZ: -92, maxZ: 92 });
+}
+spawnNPC(-2, -65, 1,  0.055);
+spawnNPC(-2, -15, 1,  0.048);
+spawnNPC( 2,  30, -1, 0.052);
+spawnNPC( 2,  72, -1, 0.045);
+spawnNPC(-2,  5,  1,  0.060);
+
+// ================================================================
+//  PEDESTRIANS
+// ================================================================
+const peds = [];
+
+function spawnPed(px, pz, pz1, pz2) {
+  const g = new THREE.Group();
+  g.add(box(0.38, 1.0, 0.28, 0x5a3e8a, 0, 0.5, 0));
+  g.add(cyl(0.18, 0.18, 0.32, 8, 0xffcc88, 0, 1.18, 0));
+  g.position.set(px, 0, pz);
+  scene.add(g);
+  peds.push({ mesh: g, dir: 1, spd: 0.015 + Math.random()*0.01, z1: pz1, z2: pz2 });
+}
+spawnPed(-7.4,-50,-90,-10);
+spawnPed( 7.4, 18,  0, 70);
+spawnPed(-7.4, 60, 20, 95);
+spawnPed( 7.4,-78,-92,-28);
+
+// ================================================================
+//  PARTICLES
+// ================================================================
+const SNOW_POOL  = 300;
+const snowPool   = [];
+const brushPool  = [];
+const spreadPool = [];
+
+const sm = new THREE.MeshLambertMaterial({ color: 0xffffff });
+const bm = new THREE.MeshLambertMaterial({ color: 0xddeeff });
+const pm = new THREE.MeshLambertMaterial({ color: 0xaa8833 });
+const sg = new THREE.SphereGeometry(0.05, 4, 4);
+const sg2 = new THREE.SphereGeometry(0.07, 4, 4);
+
+for (let i = 0; i < SNOW_POOL; i++) {
+  const m = new THREE.Mesh(sg, sm);
+  m.visible = false; scene.add(m);
+  snowPool.push({ m, active: false, vx:0, vy:0, vz:0, life:0 });
+}
+for (let i = 0; i < 30; i++) {
+  const m = new THREE.Mesh(sg2, bm);
+  m.visible = false; scene.add(m);
+  brushPool.push({ m, active: false, vx:0, vy:0, vz:0, life:0 });
+}
+for (let i = 0; i < 20; i++) {
+  const m = new THREE.Mesh(sg2, pm);
+  m.visible = false; scene.add(m);
+  spreadPool.push({ m, active: false, vx:0, vy:0, vz:0, life:0 });
+}
+
+function spawnParticle(pool, px, py, pz, vx, vy, vz, life) {
+  for (let i = 0; i < pool.length; i++) {
+    const p = pool[i];
+    if (!p.active) {
+      p.active = true; p.m.visible = true;
+      p.m.position.set(px, py, pz);
+      p.vx = vx; p.vy = vy; p.vz = vz; p.life = life;
+      return;
+    }
+  }
+}
+
+function updatePool(pool, dt, gravity) {
+  pool.forEach(p => {
+    if (!p.active) return;
+    p.m.position.x += p.vx * dt;
+    p.m.position.y += p.vy * dt;
+    p.m.position.z += p.vz * dt;
+    p.vy -= gravity * dt;
+    p.life -= dt;
+    if (p.life <= 0 || p.m.position.y < -0.2) {
+      p.active = false; p.m.visible = false;
+    }
+  });
+}
+
+// ================================================================
+//  PEDESTRIAN MODE
+// ================================================================
+let onFoot = false;
+let playerPed = null;
+
+function toggleFoot() {
+  onFoot = !onFoot;
+  if (onFoot) {
+    // Create player pedestrian
+    const pg = new THREE.Group();
+    pg.add(box(0.48, 1.1, 0.38, 0xFFD600, 0, 0.55, 0));
+    pg.add(cyl(0.2, 0.2, 0.36, 8, 0xffcc99, 0, 1.33, 0));
+    pg.add(cyl(0.22, 0.22, 0.14, 8, 0xFFAA00, 0, 1.57, 0)); // hard hat
+    // shovel
+    pg.add(box(0.04, 1.1, 0.04, 0x7b3a00, 0.32, 0.55, 0));
+    pg.add(box(0.32, 0.04, 0.22, 0x888888, 0.32, 0.04, 0));
+    const vp = vGroup.position;
+    pg.position.set(vp.x + 2.2, 0, vp.z);
+    scene.add(pg);
+    playerPed = pg;
+    chassisCannonBody.type = CANNON.Body.STATIC;
+    chassisCannonBody.velocity.set(0,0,0);
+  } else {
+    if (playerPed) { scene.remove(playerPed); playerPed = null; }
+    chassisCannonBody.type = CANNON.Body.DYNAMIC;
+  }
+  updateHUD();
+}
+
+// ================================================================
+//  GAME STATE
+// ================================================================
+let brushOn   = false;
+let spreaderOn = false;
+let gameTime  = 8 * 3600; // 08:00
+const GAME_SPD = 86400 / 600; // 10 min real = 24h game
+
 const keys = {};
-let buersteOn = false;
-let streuerOn = false;
-let inVehicle = true;
-let lastE = false;
-let beaconAngle = 0;
-let dayTime = 0; // 0..1 full cycle
-let streuerTimer = 0;
+let weatherPanel = false;
+let weather = 'cloudy';
+let snowFallTarget = 0;
+let snowRefill = 0;
 
-// ─── INPUT ────────────────────────────────────────────────────────────────────
 document.addEventListener('keydown', e => {
   keys[e.code] = true;
-  if (e.code === 'KeyB') {
-    buersteOn = !buersteOn;
-    plowGroup.visible = buersteOn;
-    document.getElementById('dot-buerste').className = 'dot' + (buersteOn ? ' on' : '');
-  }
-  if (e.code === 'KeyX') {
-    streuerOn = !streuerOn;
-    spreaderGroup.visible = streuerOn;
-    const d = document.getElementById('dot-streuer');
-    d.style.background = streuerOn ? '#2979ff' : '#555';
-    d.style.boxShadow = streuerOn ? '0 0 8px #2979ff' : 'none';
-  }
-  if (e.code === 'KeyE') {
-    inVehicle = !inVehicle;
-    const d = document.getElementById('dot-fahrzeug');
-    if (inVehicle) {
-      // Jump back in — teleport player to vehicle
-      playerBody.position.copy(vehicleBody.position);
-      playerBody.position.x += 2;
-      d.style.background = '#00e676'; d.style.boxShadow = '0 0 8px #00e676';
-    } else {
-      // Get out — place player beside vehicle
-      playerBody.position.set(
-        vehicleBody.position.x + 2.5,
-        vehicleBody.position.y,
-        vehicleBody.position.z
-      );
-      playerBody.velocity.set(0, 0, 0);
-      d.style.background = '#ff5252'; d.style.boxShadow = '0 0 8px #ff5252';
-    }
+  if (e.code === 'KeyB' && !onFoot) { brushOn   = !brushOn;   updateHUD(); }
+  if (e.code === 'KeyX' && !onFoot) { spreaderOn = !spreaderOn; updateHUD(); }
+  if (e.code === 'KeyE') toggleFoot();
+  if (e.code === 'Tab') {
+    e.preventDefault();
+    weatherPanel = !weatherPanel;
+    document.getElementById('weather-panel').style.display = weatherPanel ? 'block' : 'none';
   }
 });
 document.addEventListener('keyup', e => { keys[e.code] = false; });
 
-// ─── DAY / NIGHT CYCLE ────────────────────────────────────────────────────────
+// Weather buttons
+document.querySelectorAll('.w-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.w-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    applyWeather(btn.dataset.w);
+  });
+});
+document.getElementById('w-close').addEventListener('click', () => {
+  weatherPanel = false;
+  document.getElementById('weather-panel').style.display = 'none';
+});
+
+const weatherIcons = { sunny:'☀️', cloudy:'🌤', light:'🌨', heavy:'❄️', night:'🌙' };
+const weatherFog   = { sunny:0.003, cloudy:0.006, light:0.009, heavy:0.018, night:0.022 };
+const weatherSnow  = { sunny:0, cloudy:0, light:60, heavy:220, night:130 };
+const weatherRefill = { sunny:0, cloudy:0, light:0.003, heavy:0.01, night:0.007 };
+
+function applyWeather(w) {
+  weather = w;
+  document.getElementById('weather-icon').textContent = weatherIcons[w] || '🌤';
+  scene.fog.density   = weatherFog[w] || 0.006;
+  snowFallTarget      = weatherSnow[w]  || 0;
+  snowRefill          = weatherRefill[w] || 0;
+  if (w === 'night') gameTime = 22 * 3600;
+}
+applyWeather('cloudy');
+
+// ================================================================
+//  HUD
+// ================================================================
+function updateHUD() {
+  document.getElementById('s-brush').innerHTML  = brushOn    ? '🟢 Bürste: AN'  : '🔴 Bürste: AUS';
+  document.getElementById('s-spread').innerHTML = spreaderOn ? '🟢 Streuer: AN' : '🔴 Streuer: AUS';
+  document.getElementById('s-mode').innerHTML   = onFoot     ? '🚶 Fuß-Modus'  : '🚛 Fahrzeug-Modus';
+}
+updateHUD();
+
+// Speedometer
+function drawSpeedo(spd) {
+  const cv = document.getElementById('speedo');
+  const cx2d = cv.getContext('2d');
+  const W = 160, H = 100, cx = 80, cy = 90, r = 72;
+  cx2d.clearRect(0, 0, W, H);
+  cx2d.beginPath();
+  cx2d.arc(cx, cy, r, Math.PI*0.75, Math.PI*2.25);
+  cx2d.fillStyle = 'rgba(0,0,0,0.7)'; cx2d.fill();
+  cx2d.beginPath();
+  cx2d.arc(cx, cy, r-8, Math.PI*0.75, Math.PI*2.25);
+  cx2d.strokeStyle = '#333'; cx2d.lineWidth = 10; cx2d.stroke();
+  const pct = Math.min(spd / 60, 1);
+  cx2d.beginPath();
+  cx2d.arc(cx, cy, r-8, Math.PI*0.75, Math.PI*0.75 + pct*Math.PI*1.5);
+  cx2d.strokeStyle = spd < 30 ? '#00ff88' : spd < 50 ? '#ffaa00' : '#ff3300';
+  cx2d.lineWidth = 10; cx2d.stroke();
+  cx2d.fillStyle = '#fff'; cx2d.font = 'bold 20px Arial'; cx2d.textAlign = 'center';
+  cx2d.fillText(Math.round(spd), cx, cy);
+  cx2d.fillStyle = '#aaa'; cx2d.font = '10px Arial';
+  cx2d.fillText('km/h', cx, cy + 14);
+}
+drawSpeedo(0);
+
+// Minimap
+function drawMinimap(px, pz) {
+  const cv = document.getElementById('minimap');
+  const mc = cv.getContext('2d');
+  const W = 150, H = 150, S = W / MSIZE;
+  mc.fillStyle = '#0e1a0e'; mc.fillRect(0,0,W,H);
+  // grass
+  mc.fillStyle = '#2a4a22';
+  mc.fillRect(0,0,W,H);
+  // roads
+  mc.fillStyle = '#444';
+  mc.fillRect(W/2 - 3.5*S, 0, 7*S, H);
+  csZ.forEach(z => {
+    mc.fillRect(0, H/2 + z*S - 3*S, W, 6*S);
+  });
+  // buildings
+  mc.fillStyle = '#777';
+  BLDGS.forEach(([bx,bz,bw,bd]) => {
+    mc.fillRect(W/2 + (bx - bw/2)*S, H/2 + (bz - bd/2)*S, bw*S, bd*S);
+  });
+  // NPC cars
+  mc.fillStyle = '#f66';
+  npcs.forEach(n => {
+    mc.fillRect(W/2 + n.mesh.position.x*S - 2, H/2 + n.mesh.position.z*S - 3, 4, 6);
+  });
+  // Player
+  mc.fillStyle = '#FFD600';
+  mc.beginPath();
+  mc.arc(W/2 + px*S, H/2 + pz*S, 4, 0, Math.PI*2);
+  mc.fill();
+  mc.strokeStyle = 'rgba(255,255,255,0.3)';
+  mc.lineWidth = 1; mc.strokeRect(0,0,W,H);
+}
+
+// Progress
+let progressDirty = true;
+function updateProgress() {
+  let c = 0;
+  for (let i = 0; i < snowGrid.length; i++) if (snowGrid[i] < 0.1) c++;
+  const pct = Math.round(c / snowGrid.length * 100);
+  document.getElementById('progress-bar').textContent = `Geräumt: ${pct}%`;
+}
+
+// Clock
+function fmtTime(s) {
+  const h = Math.floor(s / 3600) % 24;
+  const m = Math.floor((s % 3600) / 60);
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+}
+
+// Snow clearing
+function wToGrid(x, z) {
+  const gx = Math.floor((x + MSIZE/2) / CELL);
+  const gz = Math.floor((z + MSIZE/2) / CELL);
+  return [Math.max(0, Math.min(GRID-1, gx)), Math.max(0, Math.min(GRID-1, gz))];
+}
+function clearSnow(wx, wz, rad) {
+  const cr = Math.ceil(rad / CELL);
+  const [cx, cz] = wToGrid(wx, wz);
+  let chg = false;
+  for (let dx = -cr; dx <= cr; dx++) {
+    for (let dz2 = -cr; dz2 <= cr; dz2++) {
+      const gx = cx + dx, gz = cz + dz2;
+      if (gx >= 0 && gx < GRID && gz >= 0 && gz < GRID) {
+        const idx = gx * GRID + gz;
+        if (snowGrid[idx] > 0.05) {
+          snowGrid[idx] = Math.max(0, snowGrid[idx] - 0.1);
+          chg = true;
+        }
+      }
+    }
+  }
+  return chg;
+}
+
+// ================================================================
+//  DAY / NIGHT
+// ================================================================
 function updateDayNight(dt) {
-  dayTime = (dayTime + dt * 0.008) % 1; // full cycle ~125s
-  const t = dayTime;
-  // 0 = dawn, 0.25 = noon, 0.5 = dusk, 0.75 = midnight
-  const angle = t * Math.PI * 2;
-  const sunY = Math.sin(angle);
-  const sunX = Math.cos(angle);
+  if (weather === 'night') return;
+  gameTime += dt * GAME_SPD;
+  if (gameTime >= 86400) gameTime -= 86400;
 
-  sunLight.position.set(sunX * 80, Math.max(sunY * 70, -20), 20);
-  const intensity = Math.max(0, sunY);
-  sunLight.intensity = intensity * 1.5;
-  ambientLight.intensity = 0.12 + intensity * 0.45;
+  const h = gameTime / 3600;
+  const daytime = h >= 6 && h < 20;
+  const dusk    = (h >= 5 && h < 6) || (h >= 20 && h < 21);
 
-  // Sky color
-  const nightCol = new THREE.Color(0x050a18);
-  const dayCol = new THREE.Color(0x87ceeb);
-  const dawnCol = new THREE.Color(0xff8c42);
-  let skyCol;
-  if (sunY > 0.3) {
-    skyCol = dayCol.clone();
-  } else if (sunY > -0.1) {
-    const f = (sunY + 0.1) / 0.4;
-    skyCol = dawnCol.clone().lerp(dayCol, f);
+  const sunAngle = ((h - 6) / 12) * Math.PI;
+  sunLight.position.set(Math.cos(sunAngle)*80, Math.max(0, Math.sin(sunAngle))*80, 40);
+  if (daytime) {
+    sunLight.intensity = Math.max(0.1, Math.sin(sunAngle) * 0.9);
+    ambLight.intensity = 0.55;
+  } else if (dusk) {
+    sunLight.intensity = 0.3;
+    ambLight.intensity = 0.3;
   } else {
-    skyCol = nightCol.clone();
+    sunLight.intensity = 0;
+    ambLight.intensity = 0.12;
   }
-  renderer.setClearColor(skyCol);
-  scene.background.set(skyCol);
-  scene.fog.color = skyCol;
 
-  // Streetlights on at night
-  const lampOn = sunY < 0.1;
-  streetlamps.forEach(l => { l.intensity = lampOn ? 1.0 : 0; });
+  // Sky colour
+  if (h < 5 || h >= 22) {
+    scene.background = new THREE.Color(0x050510);
+  } else if (dusk) {
+    const t = (h < 6) ? (h - 5) : (21 - h);
+    scene.background = new THREE.Color().lerpColors(
+      new THREE.Color(0xff8833), new THREE.Color(0x88aacc), t
+    );
+  } else if (weather === 'sunny') {
+    scene.background = new THREE.Color(0x87ceeb);
+  } else {
+    scene.background = new THREE.Color(0xaabbcc);
+  }
 
-  // HUD icon
-  const icon = sunY > 0 ? (sunY > 0.5 ? '☀️' : '🌅') : '🌙';
-  document.getElementById('daynight').textContent = icon;
+  const lightsOn = h < 6.5 || h > 19.5;
+  lanterns.forEach(l => { l.userData.pointLight.intensity = lightsOn ? 1.5 : 0; });
+  const hdsOn = h < 7 || h > 19;
+  headL.intensity = hdsOn ? 3 : 0;
+  headR.intensity = hdsOn ? 3 : 0;
+
+  document.getElementById('clock').textContent = fmtTime(gameTime);
 }
 
-// ─── STREUER PARTICLE EMIT ────────────────────────────────────────────────────
-let sHead = 0;
-function emitStreuer() {
-  const vp = vehicleBody.position;
-  const vq = vehicleBody.quaternion;
-  const back = new THREE.Vector3(0, 0.3, -2.2);
-  back.applyQuaternion(new THREE.Quaternion(vq.x, vq.y, vq.z, vq.w));
-  const ox = vp.x + back.x, oy = vp.y + back.y, oz = vp.z + back.z;
-  for (let i = 0; i < 3; i++) {
-    const idx = sHead % maxStreuerParticles;
-    sPositions[idx * 3] = ox + (Math.random() - 0.5) * 0.5;
-    sPositions[idx * 3 + 1] = oy;
-    sPositions[idx * 3 + 2] = oz + (Math.random() - 0.5) * 0.5;
-    sVelocities[idx] = {
-      x: (Math.random() - 0.5) * 1.5,
-      y: 0.8 + Math.random() * 0.8,
-      z: (Math.random() - 0.5) * 1.5,
-      life: 0,
-      maxLife: 0.6 + Math.random() * 0.4
-    };
-    sHead++;
-  }
-}
-
-// ─── MAIN LOOP ────────────────────────────────────────────────────────────────
-const clock = new THREE.Clock();
-const FORCE = 6000;
-const STEER = 0.035;
+// ================================================================
+//  MAIN LOOP
+// ================================================================
+let lastT = performance.now();
+let beaconT = 0;
+let texTimer = 0;
+let progTimer = 0;
+let texDirty  = false;
 
 function animate() {
   requestAnimationFrame(animate);
-  const dt = Math.min(clock.getDelta(), 0.05);
+  const now = performance.now();
+  const dt  = Math.min((now - lastT) / 1000, 0.05);
+  lastT = now;
 
-  world.step(1 / 60, dt, 3);
-  updateDayNight(dt);
+  // ---- Physics ----
+  world.step(1/60, dt, 3);
 
-  // ── Beacon spin
-  beaconAngle += dt * 4;
-  beaconMesh.material.color.setHSL(0.1, 1, 0.5 + 0.5 * Math.abs(Math.sin(beaconAngle)));
+  // ---- Vehicle input ----
+  if (!onFoot) {
+    if (keys['KeyW'])     engineForce = Math.min(engineForce + 200*dt, MAX_FORCE);
+    else if (keys['KeyS']) engineForce = Math.max(engineForce - 200*dt, -MAX_FORCE*0.55);
+    else                   engineForce *= 0.90;
 
-  // ── Falling snow animation
-  const sp = snowParticles.geometry.attributes.position;
-  for (let i = 0; i < snowCount; i++) {
-    sp.setY(i, sp.getY(i) - 0.03);
-    sp.setX(i, sp.getX(i) + Math.sin(Date.now() * 0.001 + i) * 0.005);
-    if (sp.getY(i) < 0) sp.setY(i, 20);
-  }
-  sp.needsUpdate = true;
+    if      (keys['KeyA']) steeringVal = Math.min(steeringVal + 1.8*dt, MAX_STEER);
+    else if (keys['KeyD']) steeringVal = Math.max(steeringVal - 1.8*dt, -MAX_STEER);
+    else                   steeringVal *= 0.80;
 
-  // ── Vehicle physics control
-  if (inVehicle) {
-    vehicleBody.wakeUp();
-    const q = vehicleBody.quaternion;
-    const forward = new CANNON.Vec3(0, 0, 1);
-    q.vmult(forward, forward);
+    const brake = keys['Space'] ? MAX_BRAKE : 0;
 
-    if (keys['KeyW']) vehicleBody.applyForce(new CANNON.Vec3(forward.x * FORCE, 0, forward.z * FORCE), vehicleBody.position);
-    if (keys['KeyS']) vehicleBody.applyForce(new CANNON.Vec3(-forward.x * FORCE * 0.6, 0, -forward.z * FORCE * 0.6), vehicleBody.position);
-    if (keys['KeyA']) vehicleBody.angularVelocity.y += STEER;
-    if (keys['KeyD']) vehicleBody.angularVelocity.y -= STEER;
+    rayVehicle.setSteeringValue(steeringVal, 0);
+    rayVehicle.setSteeringValue(steeringVal, 1);
+    rayVehicle.applyEngineForce(engineForce, 2);
+    rayVehicle.applyEngineForce(engineForce, 3);
+    for (let i = 0; i < 4; i++) rayVehicle.setBrake(brake, i);
 
-    // Keep upright
-    vehicleBody.angularVelocity.x *= 0.85;
-    vehicleBody.angularVelocity.z *= 0.85;
-    if (vehicleBody.position.y < 0.6) vehicleBody.position.y = 0.6;
+    // Upright stabilisation
+    const up = new CANNON.Vec3(0, 1, 0);
+    const bodyUp = chassisCannonBody.vectorToWorldFrame(new CANNON.Vec3(0, 1, 0));
+    const ang = Math.acos(Math.min(1, bodyUp.dot(up)));
+    if (ang > 0.08) {
+      const torq = up.cross(bodyUp);
+      chassisCannonBody.torque.x += torq.x * 600;
+      chassisCannonBody.torque.z += torq.z * 600;
+    }
 
     // Sync mesh
-    vehicleGroup.position.copy(vehicleBody.position);
-    vehicleGroup.quaternion.copy(vehicleBody.quaternion);
-    vehicleGroup.visible = true;
-    playerMesh.visible = false;
+    vGroup.position.copy(chassisCannonBody.position);
+    vGroup.quaternion.copy(chassisCannonBody.quaternion);
 
-    // Wheel spin
-    const speed = vehicleBody.velocity.length();
-    wheels.forEach(w => { w.rotation.x += speed * dt * 1.5 * (keys['KeyS'] ? -1 : 1); });
+    // Speed
+    const v = chassisCannonBody.velocity;
+    const spd = Math.sqrt(v.x*v.x + v.z*v.z) * 3.6;
+    drawSpeedo(spd);
 
-    // Camera follow
-    const camOffset = new THREE.Vector3(0, 7, 13);
-    camOffset.applyQuaternion(vehicleGroup.quaternion);
-    const targetCamPos = vehicleGroup.position.clone().add(camOffset);
-    camera.position.lerp(targetCamPos, 0.08);
-    camera.lookAt(vehicleGroup.position.clone().add(new THREE.Vector3(0, 1.5, 0)));
+    // Snow clearing
+    if (brushOn && spd > 0.5) {
+      const fwd = chassisCannonBody.vectorToWorldFrame(new CANNON.Vec3(0, 0, 1));
+      const bx  = chassisCannonBody.position.x + fwd.x * 1.85;
+      const bz  = chassisCannonBody.position.z + fwd.z * 1.85;
+      if (clearSnow(bx, bz, 1.3)) texDirty = true;
+      // brush particles
+      if (Math.random() < 0.4) {
+        spawnParticle(brushPool, bx + (Math.random()-0.5)*2.2, 0.3, bz + (Math.random()-0.5)*2.2,
+          (Math.random()-0.5)*3, Math.random()*2+0.5, (Math.random()-0.5)*3, 0.6);
+      }
+      brushCyl.rotation.x += 10 * dt;
+    }
 
-    // HUD
-    const kmh = Math.round(speed * 3.6);
-    document.getElementById('hud-speed').textContent = `Geschwindigkeit: ${kmh} km/h`;
-    document.getElementById('speedbar-fill').style.width = Math.min(kmh / 40 * 100, 100) + '%';
-    const p = vehicleBody.position;
-    document.getElementById('hud-pos').textContent = `X:${p.x.toFixed(1)} Z:${p.z.toFixed(1)}`;
+    // Spreader
+    if (spreaderOn && Math.random() < 0.5) {
+      const bk = chassisCannonBody.vectorToWorldFrame(new CANNON.Vec3(0, 0, -1));
+      spawnParticle(spreadPool,
+        chassisCannonBody.position.x + bk.x*1.8 + (Math.random()-0.5)*1.5,
+        0.5,
+        chassisCannonBody.position.z + bk.z*1.8 + (Math.random()-0.5)*1.5,
+        (Math.random()-0.5)*2, Math.random()*0.6+0.2, (Math.random()-0.5)*2, 1.2);
+    }
+
+    // Camera
+    const camOff = new THREE.Vector3(0, 7, 14);
+    const camTgt = vGroup.localToWorld(camOff.clone());
+    camera.position.lerp(camTgt, 0.07);
+    camera.lookAt(vGroup.position.x, vGroup.position.y + 1, vGroup.position.z);
+
   } else {
-    // On foot
-    playerBody.wakeUp();
-    const q = playerBody.quaternion;
-    const PFORCE = 900;
-    const fwd = new CANNON.Vec3(0, 0, 1);
-    // Simple WASD in world coords when on foot
-    if (keys['KeyW']) playerBody.applyForce(new CANNON.Vec3(0, 0, PFORCE), playerBody.position);
-    if (keys['KeyS']) playerBody.applyForce(new CANNON.Vec3(0, 0, -PFORCE), playerBody.position);
-    if (keys['KeyA']) playerBody.applyForce(new CANNON.Vec3(PFORCE, 0, 0), playerBody.position);
-    if (keys['KeyD']) playerBody.applyForce(new CANNON.Vec3(-PFORCE, 0, 0), playerBody.position);
-    playerBody.angularVelocity.set(0, 0, 0);
-    if (playerBody.position.y < 0.5) playerBody.position.y = 0.5;
+    // Pedestrian mode
+    if (playerPed) {
+      const spd = 0.055;
+      if (keys['KeyW']) {
+        const fwd = new THREE.Vector3(
+          -Math.sin(playerPed.rotation.y), 0, -Math.cos(playerPed.rotation.y)
+        );
+        playerPed.position.addScaledVector(fwd, spd);
+      }
+      if (keys['KeyS']) {
+        const bk = new THREE.Vector3(
+          Math.sin(playerPed.rotation.y), 0, Math.cos(playerPed.rotation.y)
+        );
+        playerPed.position.addScaledVector(bk, spd);
+      }
+      if (keys['KeyA']) playerPed.rotation.y += 0.04;
+      if (keys['KeyD']) playerPed.rotation.y -= 0.04;
 
-    playerMesh.position.copy(playerBody.position);
-    vehicleGroup.visible = true; // vehicle stays visible
-
-    const offset = new THREE.Vector3(0, 5, -10);
-    const targetCamPos = playerMesh.position.clone().add(offset);
-    camera.position.lerp(targetCamPos, 0.1);
-    camera.lookAt(playerMesh.position);
-    playerMesh.visible = true;
-
-    const pkmh = Math.round(playerBody.velocity.length() * 3.6);
-    document.getElementById('hud-speed').textContent = `Laufgeschwindigkeit: ${pkmh} km/h`;
-    document.getElementById('speedbar-fill').style.width = '0%';
-    document.getElementById('hud-pos').textContent = `(zu Fuß) X:${playerBody.position.x.toFixed(1)} Z:${playerBody.position.z.toFixed(1)}`;
+      const camOff = new THREE.Vector3(
+        Math.sin(playerPed.rotation.y) * 6, 4, Math.cos(playerPed.rotation.y) * 6
+      );
+      camera.position.lerp(playerPed.position.clone().add(camOff), 0.1);
+      camera.lookAt(playerPed.position.x, playerPed.position.y + 1, playerPed.position.z);
+    }
+    drawSpeedo(0);
   }
 
-  // ── Streuer particles
-  if (streuerOn && inVehicle) {
-    streuerTimer += dt;
-    if (streuerTimer > 0.04) { emitStreuer(); streuerTimer = 0; }
-  }
-  const spArr = streuerGeo.attributes.position;
-  for (let i = 0; i < maxStreuerParticles; i++) {
-    const v = sVelocities[i];
-    if (v.life < v.maxLife) {
-      v.life += dt;
-      spArr.setX(i, spArr.getX(i) + v.x * dt);
-      spArr.setY(i, spArr.getY(i) + v.y * dt - 3 * dt * dt);
-      spArr.setZ(i, spArr.getZ(i) + v.z * dt);
-      if (spArr.getY(i) < 0.05) { spArr.setY(i, 0.05); v.y = 0; }
-    } else if (v.maxLife > 0) {
-      // park off-screen
-      spArr.setX(i, 1000); spArr.setY(i, 0); spArr.setZ(i, 0);
-      v.maxLife = 0;
+  // ---- NPCs ----
+  npcs.forEach(n => {
+    n.mesh.position.z += n.dir * n.spd;
+    n.mesh.rotation.y  = n.dir > 0 ? Math.PI : 0;
+    if (n.mesh.position.z > n.maxZ) n.dir = -1;
+    if (n.mesh.position.z < n.minZ) n.dir =  1;
+  });
+
+  // ---- Pedestrians ----
+  peds.forEach(p => {
+    p.mesh.position.z += p.dir * p.spd;
+    p.mesh.rotation.y  = p.dir > 0 ? Math.PI : 0;
+    if (p.mesh.position.z > p.z2) p.dir = -1;
+    if (p.mesh.position.z < p.z1) p.dir =  1;
+  });
+
+  // ---- Beacon ----
+  beaconT += dt;
+  const bOn = Math.sin(beaconT * 3.5) > 0;
+  beaconDome.material.emissiveIntensity = bOn ? 1.2 : 0;
+  beaconDome.material.color.setHex(bOn ? 0xFF8800 : 0xFF4400);
+
+  // ---- Snow weather particles ----
+  const activeSnow = snowFallTarget;
+  if (activeSnow > 0) {
+    const toSpawn = Math.floor(activeSnow * dt * 8);
+    for (let i = 0; i < toSpawn; i++) {
+      const cx3 = camera.position.x + (Math.random()-0.5)*55;
+      const cz3 = camera.position.z + (Math.random()-0.5)*55;
+      spawnParticle(snowPool, cx3, camera.position.y + 12 + Math.random()*10, cz3,
+        (Math.random()-0.5)*0.4, -0.8 - Math.random()*0.5, (Math.random()-0.5)*0.4,
+        10 + Math.random()*5);
     }
   }
-  spArr.needsUpdate = true;
+  updatePool(snowPool,  dt, 0);
+  updatePool(brushPool, dt, 5);
+  updatePool(spreadPool, dt, 6);
+
+  // ---- Snow refill ----
+  if (snowRefill > 0) {
+    for (let i = 0; i < snowGrid.length; i++) {
+      if (snowGrid[i] < 1) { snowGrid[i] = Math.min(1, snowGrid[i] + snowRefill * dt * 0.05); texDirty = true; }
+    }
+  }
+
+  // ---- Texture update (throttled) ----
+  texTimer += dt;
+  if (texDirty && texTimer > 0.12) {
+    rebuildSnowTex(); texTimer = 0; texDirty = false; progressDirty = true;
+  }
+
+  // ---- Progress ----
+  progTimer += dt;
+  if (progressDirty && progTimer > 2) { updateProgress(); progTimer = 0; progressDirty = false; }
+
+  // ---- Day/Night ----
+  updateDayNight(dt);
+
+  // ---- Minimap ----
+  const mpp = onFoot && playerPed ? playerPed.position : vGroup.position;
+  drawMinimap(mpp.x, mpp.z);
 
   renderer.render(scene, camera);
 }
 
+// Initial sky
+scene.background = new THREE.Color(0xaabbcc);
 animate();
+
+console.log('%c✅ Schneeräum-Simulator V2 – IM NORDEN geladen!', 'color:#FFD600;font-weight:bold;font-size:14px');
 </script>
 </body>
 </html>
