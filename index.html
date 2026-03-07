@@ -1341,8 +1341,8 @@ function animate() {
     else if (keys['KeyS']) engineForce = Math.max(engineForce - 3000*dt, -MAX_FORCE*0.45);
     else                   engineForce *= 0.85;
 
-    if      (keys['KeyD']) steeringVal = Math.min(steeringVal + 2.5*dt, MAX_STEER);
-    else if (keys['KeyA']) steeringVal = Math.max(steeringVal - 2.5*dt, -MAX_STEER);
+    if      (keys['KeyA']) steeringVal = Math.min(steeringVal + 2.5*dt, MAX_STEER);
+    else if (keys['KeyD']) steeringVal = Math.max(steeringVal - 2.5*dt, -MAX_STEER);
     else                   steeringVal *= 0.75;
 
     const brake = keys['Space'] ? MAX_BRAKE : (Math.abs(engineForce) < 10 ? 5 : 0);
@@ -1472,7 +1472,7 @@ function animate() {
             0.5);
         }
         // Schnee graduell räumen — sehr schmale Schaufelspur
-        if (clearSnowLine(playerPed.position.x, playerPed.position.z, 0.10, 0.25)) texDirty = true;
+        if (clearSnowLine(playerPed.position.x, playerPed.position.z, 0.48, 0.30)) texDirty = true; // Fußgänger: 1.25x Figurbreite
         if (shovelAnim <= 0) { playerPed.rotation.z = 0; }
       }
 
