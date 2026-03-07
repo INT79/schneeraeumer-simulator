@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Schneeräumer Simulator</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; background: #000; font-family: 'Segoe UI', Arial, sans-serif; }
+    canvas { display: block; }
+    #hud {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      color: #fff;
+      font-size: 14px;
+      text-shadow: 1px 1px 3px #000;
+      pointer-events: none;
+      z-index: 10;
+    }
+    #hud h2 {
+      font-size: 18px;
+      margin-bottom: 8px;
+      color: #FFD600;
+      letter-spacing: 1px;
+    }
+    #hud .status-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 4px 0;
+    }
+    #hud .dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: #555;
+      display: inline-block;
+      box-shadow: 0 0 4px #000;
+    }
+    #hud .dot.on { background: #00e676; box-shadow: 0 0 8px #00e676; }
+    #hud .dot.streuer { background: #2979ff; box-shadow: 0 0 8px #2979ff; }
+    #hud .dot.ausgestiegen { background: #ff5252; box-shadow: 0 0 8px #ff5252; }
+    #hud .divider { border-top: 1px solid rgba(255,255,255,0.2); margin: 8px 0; }
+    #controls {
+      position: fixed;
+      bottom: 16px;
+      left: 16px;
+      color: rgba(255,255,255,0.6);
+      font-size: 12px;
+      pointer-events: none;
+      z-index: 10;
+    }
+    #controls span {
+      background: rgba(0,0,0,0.5);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 4px;
+      padding: 2px 6px;
+      margin-right: 4px;
+    }
+    #daynight {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      color: #FFD600;
+      font-size: 22px;
+      pointer-events: none;
+      z-index: 10;
+      text-shadow: 0 0 8px #FFD600;
+    }
+    #speedbar {
+      position: fixed;
+      bottom: 16px;
+      right: 16px;
+      width: 120px;
+      pointer-events: none;
+      z-index: 10;
+      color: #fff;
+      font-size: 12px;
+      text-align: right;
+    }
+    #speedbar-fill {
+      height: 8px;
+      background: linear-gradient(90deg, #FFD600, #ff6d00);
+      border-radius: 4px;
+      transition: width 0.1s;
+    }
+    #speedbar-bg {
+      background: rgba(0,0,0,0.5);
+      border-radius: 4px;
+      overflow: hidden;
+      width: 100%;
+      height: 8px;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+
+<div id="hud">
+  <h2>❄ SCHNEERÄUMER</h2>
+  <div class="status-row"><span class="dot" id="dot-buerste"></span> Bürste (B)</div>
+  <div class="status-row"><span class="dot streuer" id="dot-streuer" style="background:#555;box-shadow:none"></span> Streuer (X)</div>
+  <div class="status-row"><span class="dot ausgestiegen" id="dot-fahrzeug" style="background:#00e676;box-shadow:0 0 8px #00e676"></span> Im Fahrzeug (E)</div>
+  <div class="divider"></div>
+  <div id="hud-speed">Geschwindigkeit: 0 km/h</div>
+  <div id="hud-pos">Position: —</div>
+</div>
+
+<div id="controls">
+  <span>W</span>Vor &nbsp;
+  <span>S</span>Zurück &nbsp;
+  <span>A</span>Links &nbsp;
+  <span>D</span>Rechts &nbsp;
+  <span>B</span>Bürste &nbsp;
+  <span>X</span>Streuer &nbsp;
+  <span>E</span>Ein/Aussteigen
+</div>
+
+<div id="daynight">☀️</div>
+
+<div id="speedbar">
+  <div>Tempo</div>
+  <div id="speedbar-bg"><div id="speedbar-fill" style="width:0%"></div></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+<script>
+// ─── SCENE SETUP ─────────────────────────────────────────────────────────────
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0xaaccee, 40, 160);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.setPixelRatio(window.devicePixelRatio);
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 300);
+camera.position.set(0, 8, -14);
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ─── PHYSICS ─────────────────────────────────────────────────────────────────
+const world = new CANNON.World();
+world.gravity.set(0, -18, 0);
+world.broadphase = new CANNON.NaiveBroadphase();
+world.solver.iterations = 10;
+
+// ─── MATERIALS ───────────────────────────────────────────────────────────────
+const groundMat = new CANNON.Material('ground');
+const vehicleMat = new CANNON.Material('vehicle');
+const contact = new CANNON.ContactMaterial(groundMat, vehicleMat, {
+  friction: 0.4, restitution: 0.05
+});
+world.addContactMaterial(contact);
+
+// ─── LIGHTING ────────────────────────────────────────────────────────────────
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+scene.add(ambientLight);
+
+const sunLight = new THREE.DirectionalLight(0xffd98e, 1.2);
+sunLight.position.set(40, 60, 20);
+sunLight.castShadow = true;
+sunLight.shadow.camera.near = 0.5;
+sunLight.shadow.camera.far = 300;
+sunLight.shadow.camera.left = -80;
+sunLight.shadow.camera.right = 80;
+sunLight.shadow.camera.top = 80;
+sunLight.shadow.camera.bottom = -80;
+sunLight.shadow.mapSize.width = 2048;
+sunLight.shadow.mapSize.height = 2048;
+scene.add(sunLight);
+
+// ─── GROUND / SNOW ───────────────────────────────────────────────────────────
+function makeSnowGround() {
+  const geo = new THREE.PlaneGeometry(200, 200, 80, 80);
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    pos.setZ(i, pos.getZ(i) + (Math.random() - 0.5) * 0.12);
+  }
+  geo.computeVertexNormals();
+  const mat = new THREE.MeshLambertMaterial({ color: 0xeef4ff });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.receiveShadow = true;
+  scene.add(mesh);
+
+  const body = new CANNON.Body({ mass: 0, material: groundMat });
+  body.addShape(new CANNON.Plane());
+  body.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
+  world.addBody(body);
+}
+makeSnowGround();
+
+// ─── ROADS ───────────────────────────────────────────────────────────────────
+function addRoad(x, z, w, d) {
+  const geo = new THREE.BoxGeometry(w, 0.08, d);
+  const mat = new THREE.MeshLambertMaterial({ color: 0x333344 });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(x, 0.04, z);
+  mesh.receiveShadow = true;
+  scene.add(mesh);
+}
+
+// Main road (along Z)
+addRoad(0, 0, 10, 180);
+// Cross road (along X)
+addRoad(0, 20, 180, 10);
+addRoad(0, -20, 180, 10);
+addRoad(0, 60, 180, 10);
+addRoad(0, -60, 180, 10);
+
+// ─── SIDEWALKS ───────────────────────────────────────────────────────────────
+function addSidewalk(x, z, w, d) {
+  const geo = new THREE.BoxGeometry(w, 0.12, d);
+  const mat = new THREE.MeshLambertMaterial({ color: 0xbbccdd });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(x, 0.05, z);
+  mesh.receiveShadow = true;
+  scene.add(mesh);
+}
+
+addSidewalk(7, 0, 3, 180);
+addSidewalk(-7, 0, 3, 180);
+addSidewalk(0, 25, 180, 3);
+addSidewalk(0, -25, 180, 3);
+
+// ─── HOUSES ──────────────────────────────────────────────────────────────────
+const houseColors = [0xee8844, 0x8899bb, 0xcc6655, 0x779966, 0xaa7755, 0x667799];
+function addHouse(x, z, w, h, d, colorIdx) {
+  // Body
+  const geo = new THREE.BoxGeometry(w, h, d);
+  const mat = new THREE.MeshLambertMaterial({ color: houseColors[colorIdx % houseColors.length] });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(x, h / 2, z);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  scene.add(mesh);
+
+  // Snowy roof
+  const roofGeo = new THREE.BoxGeometry(w + 0.4, 0.25, d + 0.4);
+  const roofMat = new THREE.MeshLambertMaterial({ color: 0xddeeff });
+  const roof = new THREE.Mesh(roofGeo, roofMat);
+  roof.position.set(x, h + 0.12, z);
+  scene.add(roof);
+
+  // Roof ridge
+  const ridgeGeo = new THREE.CylinderGeometry(0.15, 0.15, w + 0.6, 6);
+  const ridgeMat = new THREE.MeshLambertMaterial({ color: 0x445566 });
+  const ridge = new THREE.Mesh(ridgeGeo, ridgeMat);
+  ridge.position.set(x, h + 0.5, z);
+  ridge.rotation.z = Math.PI / 2;
+  scene.add(ridge);
+
+  // Cannon body
+  const body = new CANNON.Body({ mass: 0, material: groundMat });
+  body.addShape(new CANNON.Box(new CANNON.Vec3(w / 2, h / 2, d / 2)));
+  body.position.set(x, h / 2, z);
+  world.addBody(body);
+}
+
+const houseLayout = [
+  [14, -50, 8, 5, 10, 0],
+  [14, -36, 7, 4, 8, 1],
+  [14, -10, 9, 6, 10, 2],
+  [14, 5, 7, 4, 8, 3],
+  [14, 35, 8, 5, 10, 4],
+  [14, 48, 10, 7, 12, 5],
+  [-14, -50, 8, 5, 10, 2],
+  [-14, -36, 7, 4, 8, 3],
+  [-14, -10, 9, 6, 10, 0],
+  [-14, 5, 7, 4, 8, 4],
+  [-14, 35, 8, 5, 10, 1],
+  [-14, 48, 10, 7, 12, 5],
+  [30, 20, 8, 5, 10, 3],
+  [-30, 20, 7, 4, 8, 0],
+  [30, -20, 9, 6, 10, 1],
+  [-30, -20, 8, 5, 10, 4],
+];
+houseLayout.forEach((h, i) => addHouse(...h));
+
+// ─── STREETLIGHTS ─────────────────────────────────────────────────────────────
+const streetlamps = [];
+function addLamp(x, z) {
+  const pole = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.08, 0.1, 5, 8),
+    new THREE.MeshLambertMaterial({ color: 0x555566 })
+  );
+  pole.position.set(x, 2.5, z);
+  pole.castShadow = true;
+  scene.add(pole);
+
+  const head = new THREE.Mesh(
+    new THREE.SphereGeometry(0.3, 8, 6),
+    new THREE.MeshBasicMaterial({ color: 0xffffcc })
+  );
+  head.position.set(x, 5.3, z);
+  scene.add(head);
+
+  const light = new THREE.PointLight(0xffffaa, 0.8, 18);
+  light.position.set(x, 5.2, z);
+  scene.add(light);
+  streetlamps.push(light);
+}
+
+for (let z = -70; z <= 80; z += 20) {
+  addLamp(8.5, z);
+  addLamp(-8.5, z);
+}
+
+// ─── SNOW PARTICLES (decorative background) ───────────────────────────────────
+const snowGeo = new THREE.BufferGeometry();
+const snowCount = 1800;
+const snowPos = new Float32Array(snowCount * 3);
+for (let i = 0; i < snowCount * 3; i += 3) {
+  snowPos[i]     = (Math.random() - 0.5) * 100;
+  snowPos[i + 1] = Math.random() * 20;
+  snowPos[i + 2] = (Math.random() - 0.5) * 100;
+}
+snowGeo.setAttribute('position', new THREE.BufferAttribute(snowPos, 3));
+const snowMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.18, transparent: true, opacity: 0.85 });
+const snowParticles = new THREE.Points(snowGeo, snowMat);
+scene.add(snowParticles);
+
+// ─── VEHICLE ─────────────────────────────────────────────────────────────────
+const vehicleGroup = new THREE.Group();
+scene.add(vehicleGroup);
+
+// Body
+const bodyMesh = new THREE.Mesh(
+  new THREE.BoxGeometry(2.2, 1.0, 3.8),
+  new THREE.MeshLambertMaterial({ color: 0xFFD600 })
+);
+bodyMesh.castShadow = true;
+bodyMesh.position.y = 0.2;
+vehicleGroup.add(bodyMesh);
+
+// Cab
+const cabMesh = new THREE.Mesh(
+  new THREE.BoxGeometry(2.0, 0.85, 1.8),
+  new THREE.MeshLambertMaterial({ color: 0xFFD600 })
+);
+cabMesh.position.set(0, 1.0, -0.5);
+cabMesh.castShadow = true;
+vehicleGroup.add(cabMesh);
+
+// Windscreen (tinted glass)
+const wsMesh = new THREE.Mesh(
+  new THREE.BoxGeometry(1.8, 0.55, 0.05),
+  new THREE.MeshLambertMaterial({ color: 0x88aacc, transparent: true, opacity: 0.5 })
+);
+wsMesh.position.set(0, 1.15, -1.4);
+vehicleGroup.add(wsMesh);
+
+// Wheels
+const wheelGeo = new THREE.CylinderGeometry(0.38, 0.38, 0.28, 12);
+const wheelMat = new THREE.MeshLambertMaterial({ color: 0x222222 });
+const wheelPositions = [[1.25, 0, 1.2], [-1.25, 0, 1.2], [1.25, 0, -1.3], [-1.25, 0, -1.3]];
+const wheels = [];
+wheelPositions.forEach(pos => {
+  const w = new THREE.Mesh(wheelGeo, wheelMat);
+  w.rotation.z = Math.PI / 2;
+  w.position.set(...pos);
+  w.castShadow = true;
+  vehicleGroup.add(w);
+  wheels.push(w);
+});
+
+// Plow blade (Bürste/Pflugschild)
+const plowGroup = new THREE.Group();
+const plowMesh = new THREE.Mesh(
+  new THREE.BoxGeometry(2.6, 0.55, 0.18),
+  new THREE.MeshLambertMaterial({ color: 0xff6600 })
+);
+plowMesh.position.set(0, 0.1, 2.15);
+plowGroup.add(plowMesh);
+const plowBrace = new THREE.Mesh(
+  new THREE.BoxGeometry(0.12, 0.35, 0.6),
+  new THREE.MeshLambertMaterial({ color: 0x888888 })
+);
+plowBrace.position.set(0, 0, 1.85);
+plowGroup.add(plowBrace);
+vehicleGroup.add(plowGroup);
+plowGroup.visible = false;
+
+// Spreader (Streuer) - back
+const spreaderGroup = new THREE.Group();
+const spreaderMesh = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.35, 0.55, 0.7, 10),
+  new THREE.MeshLambertMaterial({ color: 0x333388 })
+);
+spreaderMesh.position.set(0, 0.45, -2.0);
+spreaderGroup.add(spreaderMesh);
+vehicleGroup.add(spreaderGroup);
+spreaderGroup.visible = false;
+
+// Beacon light (Rundumleuchte)
+const beaconMesh = new THREE.Mesh(
+  new THREE.SphereGeometry(0.18, 8, 6),
+  new THREE.MeshBasicMaterial({ color: 0xffaa00 })
+);
+beaconMesh.position.set(0, 1.55, -0.5);
+vehicleGroup.add(beaconMesh);
+
+// ─── PHYSICS BODY FOR VEHICLE ─────────────────────────────────────────────────
+const vehicleBody = new CANNON.Body({ mass: 1200, material: vehicleMat });
+vehicleBody.addShape(new CANNON.Box(new CANNON.Vec3(1.1, 0.6, 2.0)));
+vehicleBody.position.set(0, 1.2, 0);
+vehicleBody.linearDamping = 0.6;
+vehicleBody.angularDamping = 0.98;
+world.addBody(vehicleBody);
+
+// ─── STREUER PARTICLES ────────────────────────────────────────────────────────
+const streuerGeo = new THREE.BufferGeometry();
+const maxStreuerParticles = 200;
+const sPositions = new Float32Array(maxStreuerParticles * 3);
+const sVelocities = [];
+for (let i = 0; i < maxStreuerParticles; i++) {
+  sPositions[i * 3] = 1000; sPositions[i * 3 + 1] = 0; sPositions[i * 3 + 2] = 0;
+  sVelocities.push({ x: 0, y: 0, z: 0, life: 0, maxLife: 0 });
+}
+streuerGeo.setAttribute('position', new THREE.BufferAttribute(sPositions, 3));
+const streuerMat = new THREE.PointsMaterial({ color: 0xffdd88, size: 0.12, transparent: true, opacity: 0.9 });
+const streuerParticles = new THREE.Points(streuerGeo, streuerMat);
+scene.add(streuerParticles);
+
+// ─── PLAYER ON FOOT (when exited vehicle) ─────────────────────────────────────
+const playerMesh = new THREE.Mesh(
+  new THREE.CapsuleGeometry ? new THREE.CapsuleGeometry(0.3, 1.0, 4, 8)
+    : new THREE.CylinderGeometry(0.3, 0.3, 1.6, 8),
+  new THREE.MeshLambertMaterial({ color: 0x2255aa })
+);
+playerMesh.castShadow = true;
+scene.add(playerMesh);
+playerMesh.visible = false;
+
+const playerBody = new CANNON.Body({ mass: 70, material: vehicleMat });
+playerBody.addShape(new CANNON.Sphere(0.4));
+playerBody.position.set(3, 1.5, 0);
+playerBody.linearDamping = 0.92;
+playerBody.angularDamping = 1.0;
+world.addBody(playerBody);
+
+// ─── STATE ────────────────────────────────────────────────────────────────────
+const keys = {};
+let buersteOn = false;
+let streuerOn = false;
+let inVehicle = true;
+let lastE = false;
+let beaconAngle = 0;
+let dayTime = 0; // 0..1 full cycle
+let streuerTimer = 0;
+
+// ─── INPUT ────────────────────────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (e.code === 'KeyB') {
+    buersteOn = !buersteOn;
+    plowGroup.visible = buersteOn;
+    document.getElementById('dot-buerste').className = 'dot' + (buersteOn ? ' on' : '');
+  }
+  if (e.code === 'KeyX') {
+    streuerOn = !streuerOn;
+    spreaderGroup.visible = streuerOn;
+    const d = document.getElementById('dot-streuer');
+    d.style.background = streuerOn ? '#2979ff' : '#555';
+    d.style.boxShadow = streuerOn ? '0 0 8px #2979ff' : 'none';
+  }
+  if (e.code === 'KeyE') {
+    inVehicle = !inVehicle;
+    const d = document.getElementById('dot-fahrzeug');
+    if (inVehicle) {
+      // Jump back in — teleport player to vehicle
+      playerBody.position.copy(vehicleBody.position);
+      playerBody.position.x += 2;
+      d.style.background = '#00e676'; d.style.boxShadow = '0 0 8px #00e676';
+    } else {
+      // Get out — place player beside vehicle
+      playerBody.position.set(
+        vehicleBody.position.x + 2.5,
+        vehicleBody.position.y,
+        vehicleBody.position.z
+      );
+      playerBody.velocity.set(0, 0, 0);
+      d.style.background = '#ff5252'; d.style.boxShadow = '0 0 8px #ff5252';
+    }
+  }
+});
+document.addEventListener('keyup', e => { keys[e.code] = false; });
+
+// ─── DAY / NIGHT CYCLE ────────────────────────────────────────────────────────
+function updateDayNight(dt) {
+  dayTime = (dayTime + dt * 0.008) % 1; // full cycle ~125s
+  const t = dayTime;
+  // 0 = dawn, 0.25 = noon, 0.5 = dusk, 0.75 = midnight
+  const angle = t * Math.PI * 2;
+  const sunY = Math.sin(angle);
+  const sunX = Math.cos(angle);
+
+  sunLight.position.set(sunX * 80, Math.max(sunY * 70, -20), 20);
+  const intensity = Math.max(0, sunY);
+  sunLight.intensity = intensity * 1.5;
+  ambientLight.intensity = 0.12 + intensity * 0.45;
+
+  // Sky color
+  const nightCol = new THREE.Color(0x050a18);
+  const dayCol = new THREE.Color(0x87ceeb);
+  const dawnCol = new THREE.Color(0xff8c42);
+  let skyCol;
+  if (sunY > 0.3) {
+    skyCol = dayCol.clone();
+  } else if (sunY > -0.1) {
+    const f = (sunY + 0.1) / 0.4;
+    skyCol = dawnCol.clone().lerp(dayCol, f);
+  } else {
+    skyCol = nightCol.clone();
+  }
+  renderer.setClearColor(skyCol);
+  scene.fog.color = skyCol;
+
+  // Streetlights on at night
+  const lampOn = sunY < 0.1;
+  streetlamps.forEach(l => { l.intensity = lampOn ? 1.0 : 0; });
+
+  // HUD icon
+  const icon = sunY > 0 ? (sunY > 0.5 ? '☀️' : '🌅') : '🌙';
+  document.getElementById('daynight').textContent = icon;
+}
+
+// ─── STREUER PARTICLE EMIT ────────────────────────────────────────────────────
+let sHead = 0;
+function emitStreuer() {
+  const vp = vehicleBody.position;
+  const vq = vehicleBody.quaternion;
+  const back = new THREE.Vector3(0, 0.3, -2.2);
+  back.applyQuaternion(new THREE.Quaternion(vq.x, vq.y, vq.z, vq.w));
+  const ox = vp.x + back.x, oy = vp.y + back.y, oz = vp.z + back.z;
+  for (let i = 0; i < 3; i++) {
+    const idx = sHead % maxStreuerParticles;
+    sPositions[idx * 3] = ox + (Math.random() - 0.5) * 0.5;
+    sPositions[idx * 3 + 1] = oy;
+    sPositions[idx * 3 + 2] = oz + (Math.random() - 0.5) * 0.5;
+    sVelocities[idx] = {
+      x: (Math.random() - 0.5) * 1.5,
+      y: 0.8 + Math.random() * 0.8,
+      z: (Math.random() - 0.5) * 1.5,
+      life: 0,
+      maxLife: 0.6 + Math.random() * 0.4
+    };
+    sHead++;
+  }
+}
+
+// ─── MAIN LOOP ────────────────────────────────────────────────────────────────
+const clock = new THREE.Clock();
+const FORCE = 6000;
+const STEER = 0.035;
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+
+  world.step(1 / 60, dt, 3);
+  updateDayNight(dt);
+
+  // ── Beacon spin
+  beaconAngle += dt * 4;
+  beaconMesh.material.color.setHSL(0.1, 1, 0.5 + 0.5 * Math.abs(Math.sin(beaconAngle)));
+
+  // ── Falling snow animation
+  const sp = snowParticles.geometry.attributes.position;
+  for (let i = 0; i < snowCount; i++) {
+    sp.setY(i, sp.getY(i) - 0.03);
+    sp.setX(i, sp.getX(i) + Math.sin(Date.now() * 0.001 + i) * 0.005);
+    if (sp.getY(i) < 0) sp.setY(i, 20);
+  }
+  sp.needsUpdate = true;
+
+  // ── Vehicle physics control
+  if (inVehicle) {
+    vehicleBody.wakeUp();
+    const q = vehicleBody.quaternion;
+    const forward = new CANNON.Vec3(0, 0, 1);
+    q.vmult(forward, forward);
+
+    if (keys['KeyW']) vehicleBody.applyForce(new CANNON.Vec3(forward.x * FORCE, 0, forward.z * FORCE), vehicleBody.position);
+    if (keys['KeyS']) vehicleBody.applyForce(new CANNON.Vec3(-forward.x * FORCE * 0.6, 0, -forward.z * FORCE * 0.6), vehicleBody.position);
+    if (keys['KeyA']) vehicleBody.angularVelocity.y += STEER;
+    if (keys['KeyD']) vehicleBody.angularVelocity.y -= STEER;
+
+    // Keep upright
+    vehicleBody.angularVelocity.x *= 0.85;
+    vehicleBody.angularVelocity.z *= 0.85;
+    if (vehicleBody.position.y < 0.6) vehicleBody.position.y = 0.6;
+
+    // Sync mesh
+    vehicleGroup.position.copy(vehicleBody.position);
+    vehicleGroup.quaternion.copy(vehicleBody.quaternion);
+    vehicleGroup.visible = true;
+    playerMesh.visible = false;
+
+    // Wheel spin
+    const speed = vehicleBody.velocity.length();
+    wheels.forEach(w => { w.rotation.x += speed * dt * 1.5 * (keys['KeyS'] ? -1 : 1); });
+
+    // Camera follow
+    const camOffset = new THREE.Vector3(0, 7, -13);
+    camOffset.applyQuaternion(vehicleGroup.quaternion);
+    const targetCamPos = vehicleGroup.position.clone().add(camOffset);
+    camera.position.lerp(targetCamPos, 0.08);
+    camera.lookAt(vehicleGroup.position.clone().add(new THREE.Vector3(0, 1.5, 0)));
+
+    // HUD
+    const kmh = Math.round(speed * 3.6);
+    document.getElementById('hud-speed').textContent = `Geschwindigkeit: ${kmh} km/h`;
+    document.getElementById('speedbar-fill').style.width = Math.min(kmh / 40 * 100, 100) + '%';
+    const p = vehicleBody.position;
+    document.getElementById('hud-pos').textContent = `X:${p.x.toFixed(1)} Z:${p.z.toFixed(1)}`;
+  } else {
+    // On foot
+    playerBody.wakeUp();
+    const q = playerBody.quaternion;
+    const PFORCE = 900;
+    const fwd = new CANNON.Vec3(0, 0, 1);
+    // Simple WASD in world coords when on foot
+    if (keys['KeyW']) playerBody.applyForce(new CANNON.Vec3(0, 0, PFORCE), playerBody.position);
+    if (keys['KeyS']) playerBody.applyForce(new CANNON.Vec3(0, 0, -PFORCE), playerBody.position);
+    if (keys['KeyA']) playerBody.applyForce(new CANNON.Vec3(PFORCE, 0, 0), playerBody.position);
+    if (keys['KeyD']) playerBody.applyForce(new CANNON.Vec3(-PFORCE, 0, 0), playerBody.position);
+    playerBody.angularVelocity.set(0, 0, 0);
+    if (playerBody.position.y < 0.5) playerBody.position.y = 0.5;
+
+    playerMesh.position.copy(playerBody.position);
+    vehicleGroup.visible = true; // vehicle stays visible
+
+    const offset = new THREE.Vector3(0, 5, -10);
+    const targetCamPos = playerMesh.position.clone().add(offset);
+    camera.position.lerp(targetCamPos, 0.1);
+    camera.lookAt(playerMesh.position);
+    playerMesh.visible = true;
+
+    const pkmh = Math.round(playerBody.velocity.length() * 3.6);
+    document.getElementById('hud-speed').textContent = `Laufgeschwindigkeit: ${pkmh} km/h`;
+    document.getElementById('speedbar-fill').style.width = '0%';
+    document.getElementById('hud-pos').textContent = `(zu Fuß) X:${playerBody.position.x.toFixed(1)} Z:${playerBody.position.z.toFixed(1)}`;
+  }
+
+  // ── Streuer particles
+  if (streuerOn && inVehicle) {
+    streuerTimer += dt;
+    if (streuerTimer > 0.04) { emitStreuer(); streuerTimer = 0; }
+  }
+  const spArr = streuerGeo.attributes.position;
+  for (let i = 0; i < maxStreuerParticles; i++) {
+    const v = sVelocities[i];
+    if (v.life < v.maxLife) {
+      v.life += dt;
+      spArr.setX(i, spArr.getX(i) + v.x * dt);
+      spArr.setY(i, spArr.getY(i) + v.y * dt - 3 * dt * dt);
+      spArr.setZ(i, spArr.getZ(i) + v.z * dt);
+      if (spArr.getY(i) < 0.05) { spArr.setY(i, 0.05); v.y = 0; }
+    } else if (v.maxLife > 0) {
+      // park off-screen
+      spArr.setX(i, 1000); spArr.setY(i, 0); spArr.setZ(i, 0);
+      v.maxLife = 0;
+    }
+  }
+  spArr.needsUpdate = true;
+
+  renderer.render(scene, camera);
+}
+
+animate();
+</script>
+</body>
+</html>
