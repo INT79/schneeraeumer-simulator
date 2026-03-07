@@ -661,7 +661,7 @@ function addStrip(cx, cz, w, len, dir, color, yOff, tex) {
   const matOpts = tex ? { map: tex } : { color };
   const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial(matOpts));
   mesh.rotation.x = -Math.PI / 2;
-  mesh.position.set(cx, 0.010 + yOff * 0.001, cz);
+  mesh.position.set(cx, 0.038 + yOff * 0.001, cz); // Gehweg 2.5cm über Fahrbahn
   mesh.receiveShadow = true;
   scene.add(mesh);
 }
@@ -669,6 +669,22 @@ function addStrip(cx, cz, w, len, dir, color, yOff, tex) {
 // Vollständiger Bürgersteig-Querschnitt
 // side: +1 = rechts/oben, -1 = links/unten; cx/cz = Straßenmitte; halfW = halbe Straßenbreite
 // Layout (Referenzfotos Wedding/Mitte): Grünstreifen DIREKT an Fahrbahn, dann Pflaster, Gehweg, Radweg
+// Bordstein (Granitbordstein, ~12cm hoch, 18cm breit)
+function addBordstein(cx, cz, len, dir, isMain) {
+  const h = 0.12;   // 12cm hoch (Berliner Hochbord)
+  const w = 0.16;   // 16cm breit
+  const col = 0xb0aba4; // Granit hellgrau
+  const geo = dir === 'NS'
+    ? new THREE.BoxGeometry(w, h, len)
+    : new THREE.BoxGeometry(len, h, w);
+  const mat = new THREE.MeshLambertMaterial({ color: col });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(cx, 0.011 + h/2, cz); // sitzt auf der Fahrbahn
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  scene.add(mesh);
+}
+
 function buildFullSidewalk(cx, cz, halfW, len, dir, isMain, side) {
   const s = side; // +1 oder -1
   const layers = isMain ? [
@@ -683,6 +699,12 @@ function buildFullSidewalk(cx, cz, halfW, len, dir, isMain, side) {
     { off: halfW + 2.2,  w: 1.6, col: COL_GEHWEG, tex: getConcreteTex() }, // Fußweg (Betonplatten-Textur)
     { off: halfW + 3.8,  w: 0.7, col: COL_RADWEG, tex: null          }, // Radweg (Nebenstraße)
   ];
+  // Bordstein an der Fahrbahn-Kante (direkt am Straßenrand)
+  const bordsteinOff = (halfW + 0.08) * s; // 8cm außerhalb der Fahrbahn
+  const bx = dir === 'NS' ? cx + bordsteinOff : cx;
+  const bz = dir === 'NS' ? cz               : cz + bordsteinOff;
+  addBordstein(bx, bz, len, dir, isMain);
+
   layers.forEach((l, i) => {
     const off = l.off * s;
     const px = dir === 'NS' ? cx + off : cx;
