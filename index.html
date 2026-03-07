@@ -129,6 +129,7 @@ canvas#gameCanvas { display: block; position: fixed; top: 0; left: 0; }
     X &nbsp;—&nbsp; Streuer An/Aus<br>
     E &nbsp;—&nbsp; Aus/Einsteigen<br>
     F &nbsp;—&nbsp; Schaufel (Fuß)<br>
+    M &nbsp;—&nbsp; Sound Mute<br>
     TAB &nbsp;—&nbsp; Wetter
   </div>
 </div>
@@ -150,6 +151,99 @@ canvas#gameCanvas { display: block; position: fixed; top: 0; left: 0; }
 // ================================================================
 //  SCHNEERÄUM-SIMULATOR V2  –  IM NORDEN
 // ================================================================
+
+// ================================================================
+//  SOUND SYSTEM (Web Audio API – kein CDN)
+// ================================================================
+let audioCtx = null;
+let soundEnabled = true;
+let motorOsc = null, motorGain = null;
+let brushNoise = null, brushGain = null, brushBuffer = null;
+let spreaderLastSound = 0;
+
+function initAudio() {
+  if (audioCtx) return;
+  try {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    // Motor: Sägezahn-Oszillator, 60-180Hz je nach Geschwindigkeit
+    motorGain = audioCtx.createGain();
+    motorGain.gain.value = 0;
+    motorOsc = audioCtx.createOscillator();
+    motorOsc.type = 'sawtooth';
+    motorOsc.frequency.value = 65;
+    const motorFilter = audioCtx.createBiquadFilter();
+    motorFilter.type = 'lowpass';
+    motorFilter.frequency.value = 350;
+    motorOsc.connect(motorFilter);
+    motorFilter.connect(motorGain);
+    motorGain.connect(audioCtx.destination);
+    motorOsc.start();
+
+    // Bürste: weißes Rauschen (loopend)
+    const bufLen = audioCtx.sampleRate * 2;
+    brushBuffer = audioCtx.createBuffer(1, bufLen, audioCtx.sampleRate);
+    const dat = brushBuffer.getChannelData(0);
+    for (let i = 0; i < bufLen; i++) dat[i] = Math.random() * 2 - 1;
+
+    brushGain = audioCtx.createGain();
+    brushGain.gain.value = 0;
+    const brushFilter = audioCtx.createBiquadFilter();
+    brushFilter.type = 'bandpass';
+    brushFilter.frequency.value = 900;
+    brushFilter.Q.value = 0.4;
+    brushGain.connect(brushFilter);
+    brushFilter.connect(audioCtx.destination);
+    _restartBrushNoise();
+  } catch(e) { audioCtx = null; }
+}
+
+function _restartBrushNoise() {
+  if (!audioCtx || !brushBuffer) return;
+  if (brushNoise) { try { brushNoise.stop(); } catch(e){} }
+  brushNoise = audioCtx.createBufferSource();
+  brushNoise.buffer = brushBuffer;
+  brushNoise.loop = true;
+  brushNoise.connect(brushGain);
+  brushNoise.start();
+}
+
+function updateMotorSound(spd) {
+  if (!audioCtx || !soundEnabled || document.visibilityState !== 'visible') {
+    if (motorGain) motorGain.gain.setTargetAtTime(0, audioCtx ? audioCtx.currentTime : 0, 0.1);
+    return;
+  }
+  const t = audioCtx.currentTime;
+  const freq = 60 + Math.min(spd / 60, 1) * 120;
+  motorOsc.frequency.setTargetAtTime(freq, t, 0.12);
+  const vol = onFoot ? 0.03 : 0.06 + Math.min(spd / 60, 1) * 0.10;
+  motorGain.gain.setTargetAtTime(vol, t, 0.08);
+}
+
+function updateBrushSound(active) {
+  if (!audioCtx || !brushGain) return;
+  const vol = (active && soundEnabled && document.visibilityState === 'visible') ? 0.07 : 0;
+  brushGain.gain.setTargetAtTime(vol, audioCtx.currentTime, 0.12);
+}
+
+function playSpreaderSound() {
+  if (!audioCtx || !soundEnabled || document.visibilityState !== 'visible') return;
+  const now = audioCtx.currentTime;
+  if (now - spreaderLastSound < 0.18) return;
+  spreaderLastSound = now;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'square';
+  osc.frequency.value = 180 + Math.random() * 320;
+  gain.gain.setValueAtTime(0.10, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start(now); osc.stop(now + 0.09);
+}
+
+document.addEventListener('keydown', () => initAudio(), { once: true });
+document.addEventListener('click',   () => initAudio(), { once: true });
 
 // ---- Renderer ----
 const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gameCanvas'), antialias: true });
@@ -196,15 +290,15 @@ const snowTex = new THREE.CanvasTexture(snowCvs);
 
 function rebuildSnowTex() {
   const cw = 512 / GRID;
-  // Hintergrund: transparent (wird durch Alphakanal gesteuert)
-  snowCtx.clearRect(0, 0, 512, 512);
+  // Geräumte Zellen: dunkler Asphalt; Schnee: weiß
+  snowCtx.fillStyle = 'rgba(60,60,65,0.95)';
+  snowCtx.fillRect(0, 0, 512, 512);
   for (let i = 0; i < GRID; i++) {
     for (let j = 0; j < GRID; j++) {
       const v = snowGrid[i * GRID + j];
-      if (v > 0.02) {
-        // Weiß mit Alpha entsprechend Schneemenge
-        const alpha = Math.min(1, v * 1.1);
-        snowCtx.fillStyle = `rgba(240,245,255,${alpha.toFixed(2)})`;
+      if (v > 0.05) {
+        // Schnee: weiß, scharfer Übergang
+        snowCtx.fillStyle = `rgba(240,245,255,${Math.min(1, v).toFixed(2)})`;
         snowCtx.fillRect(i * cw, j * cw, cw + 1, cw + 1);
       }
     }
@@ -728,6 +822,28 @@ wConns.forEach(pos => {
 });
 rayVehicle.addToWorld(world);
 
+// Kollisions-Event für Fahrzeug
+chassisCannonBody.addEventListener('collide', (e) => {
+  if (collisionFlash > 0.2) return; // kein Spam
+  const contact = e.contact;
+  const cp = contact.bi === chassisCannonBody ? contact.rj : contact.ri;
+  const wPos = e.contact.bi === chassisCannonBody
+    ? new THREE.Vector3(
+        chassisCannonBody.position.x + contact.rj.x,
+        chassisCannonBody.position.y + contact.rj.y,
+        chassisCannonBody.position.z + contact.rj.z)
+    : new THREE.Vector3(
+        chassisCannonBody.position.x + contact.ri.x,
+        chassisCannonBody.position.y + contact.ri.y,
+        chassisCannonBody.position.z + contact.ri.z);
+  collisionFlash = 0.5;
+  const cnt = 5 + Math.floor(Math.random() * 4);
+  for (let k = 0; k < cnt; k++) {
+    spawnParticle(collisionPool, wPos.x, Math.max(0.3, wPos.y), wPos.z,
+      (Math.random()-0.5)*5, Math.random()*3+1, (Math.random()-0.5)*5, 0.7);
+  }
+});
+
 // Vehicle state
 let engineForce = 0, steeringVal = 0;
 const MAX_FORCE   = 2800;
@@ -803,6 +919,25 @@ for (let i = 0; i < 20; i++) {
   spreadPool.push({ m, active: false, vx:0, vy:0, vz:0, life:0 });
 }
 
+// Kollisions-Partikel (grau)
+const collisionPool = [];
+const collMat = new THREE.MeshLambertMaterial({ color: 0x888888 });
+const sg3 = new THREE.SphereGeometry(0.13, 4, 4);
+for (let i = 0; i < 15; i++) {
+  const m = new THREE.Mesh(sg3, collMat);
+  m.visible = false; scene.add(m);
+  collisionPool.push({ m, active: false, vx:0, vy:0, vz:0, life:0 });
+}
+
+// Schaufel-Partikel (weiß, für Fuß-Modus)
+const shovelPool = [];
+const shovelMat = new THREE.MeshLambertMaterial({ color: 0xeef4ff, emissive: new THREE.Color(0xaaccff), emissiveIntensity: 0.4 });
+for (let i = 0; i < 20; i++) {
+  const m = new THREE.Mesh(sg, shovelMat);
+  m.visible = false; scene.add(m);
+  shovelPool.push({ m, active: false, vx:0, vy:0, vz:0, life:0 });
+}
+
 function spawnParticle(pool, px, py, pz, vx, vy, vz, life) {
   for (let i = 0; i < pool.length; i++) {
     const p = pool[i];
@@ -865,6 +1000,8 @@ function toggleFoot() {
 let brushOn   = false;
 let spreaderOn = false;
 let gameTime  = 8 * 3600; // 08:00
+let shovelAnim = 0;        // Schaufel-Animations-Timer
+let collisionFlash = 0;    // Kollisions-HUD-Flash-Timer
 const GAME_SPD = 86400 / 600; // 10 min real = 24h game
 
 const keys = {};
@@ -878,6 +1015,17 @@ document.addEventListener('keydown', e => {
   if (e.code === 'KeyB' && !onFoot) { brushOn   = !brushOn;   updateHUD(); }
   if (e.code === 'KeyX' && !onFoot) { spreaderOn = !spreaderOn; updateHUD(); }
   if (e.code === 'KeyE') toggleFoot();
+  if (e.code === 'KeyF' && onFoot && playerPed && shovelAnim <= 0) {
+    shovelAnim = 0.65; // Schaufel-Animation starten
+  }
+  if (e.code === 'KeyM') {
+    soundEnabled = !soundEnabled;
+    if (!soundEnabled) {
+      if (motorGain) motorGain.gain.setTargetAtTime(0, audioCtx ? audioCtx.currentTime : 0, 0.05);
+      if (brushGain)  brushGain.gain.setTargetAtTime(0, audioCtx ? audioCtx.currentTime : 0, 0.05);
+    }
+    document.getElementById('s-mode').title = soundEnabled ? 'Sound AN (M)' : 'Sound AUS (M)';
+  }
   if (e.code === 'Tab') {
     e.preventDefault();
     weatherPanel = !weatherPanel;
@@ -948,36 +1096,69 @@ function drawSpeedo(spd) {
 }
 drawSpeedo(0);
 
-// Minimap
+// Minimap (auf Spieler zentriert)
 function drawMinimap(px, pz) {
   const cv = document.getElementById('minimap');
   const mc = cv.getContext('2d');
   const W = 150, H = 150, S = W / MSIZE;
-  mc.fillStyle = '#0e1a0e'; mc.fillRect(0,0,W,H);
-  // grass
+  // Hilfsfunktion: Weltkoordinate → Minimap-Pixel (zentriert auf Spieler)
+  const mx = (wx) => W/2 + (wx - px) * S;
+  const mz = (wz) => H/2 + (wz - pz) * S;
+
+  // Gras-Hintergrund
   mc.fillStyle = '#2a4a22';
   mc.fillRect(0,0,W,H);
-  // roads
+
+  // Geräumte Schnee-Bereiche (dunkleres Grau auf der Minimap)
+  const cw = W / GRID;
+  const ch = H / GRID;
+  for (let i = 0; i < GRID; i++) {
+    for (let j = 0; j < GRID; j++) {
+      if (snowGrid[i * GRID + j] < 0.1) {
+        // Weltposition der Zelle
+        const wx = -MSIZE/2 + i * CELL;
+        const wz = -MSIZE/2 + j * CELL;
+        mc.fillStyle = 'rgba(55,55,60,0.6)';
+        mc.fillRect(mx(wx), mz(wz), CELL*S+1, CELL*S+1);
+      }
+    }
+  }
+
+  // Straßen
   mc.fillStyle = '#444';
-  mc.fillRect(W/2 - 3.5*S, 0, 7*S, H);
+  mc.fillRect(mx(-3.5), 0, 7*S, H);
   csZ.forEach(z => {
-    mc.fillRect(0, H/2 + z*S - 3*S, W, 6*S);
+    mc.fillRect(0, mz(z-3), W, 6*S);
   });
-  // buildings
+
+  // Gebäude
   mc.fillStyle = '#777';
   BLDGS.forEach(([bx,bz,bw,bd]) => {
-    mc.fillRect(W/2 + (bx - bw/2)*S, H/2 + (bz - bd/2)*S, bw*S, bd*S);
+    mc.fillRect(mx(bx - bw/2), mz(bz - bd/2), bw*S, bd*S);
   });
-  // NPC cars
-  mc.fillStyle = '#f66';
+
+  // NPC-Autos (rote Punkte)
+  mc.fillStyle = '#ff4444';
   npcs.forEach(n => {
-    mc.fillRect(W/2 + n.mesh.position.x*S - 2, H/2 + n.mesh.position.z*S - 3, 4, 6);
+    mc.beginPath();
+    mc.arc(mx(n.mesh.position.x), mz(n.mesh.position.z), 3, 0, Math.PI*2);
+    mc.fill();
   });
-  // Player
-  mc.fillStyle = '#FFD600';
+
+  // Fußgänger (blaue Punkte)
+  mc.fillStyle = '#4488ff';
+  peds.forEach(p => {
+    mc.beginPath();
+    mc.arc(mx(p.mesh.position.x), mz(p.mesh.position.z), 2.5, 0, Math.PI*2);
+    mc.fill();
+  });
+
+  // Spieler immer in der Mitte (weißer Punkt)
+  mc.fillStyle = '#ffffff';
   mc.beginPath();
-  mc.arc(W/2 + px*S, H/2 + pz*S, 4, 0, Math.PI*2);
+  mc.arc(W/2, H/2, 4, 0, Math.PI*2);
   mc.fill();
+
   mc.strokeStyle = 'rgba(255,255,255,0.3)';
   mc.lineWidth = 1; mc.strokeRect(0,0,W,H);
 }
@@ -1014,7 +1195,7 @@ function clearSnow(wx, wz, rad) {
       if (gx >= 0 && gx < GRID && gz >= 0 && gz < GRID) {
         const idx = gx * GRID + gz;
         if (snowGrid[idx] > 0.05) {
-          snowGrid[idx] = Math.max(0, snowGrid[idx] - 0.1);
+          snowGrid[idx] = 0; // sofortiger scharfer Übergang
           chg = true;
         }
       }
@@ -1127,13 +1308,17 @@ function animate() {
     const v = chassisCannonBody.velocity;
     const spd = Math.sqrt(v.x*v.x + v.z*v.z) * 3.6;
     drawSpeedo(spd);
+    if (audioCtx) {
+      updateMotorSound(spd);
+      updateBrushSound(brushOn && spd > 0.5);
+    }
 
     // Snow clearing
     if (brushOn && spd > 0.5) {
       const fwd = chassisCannonBody.vectorToWorldFrame(new CANNON.Vec3(0, 0, 1));
       const bx  = chassisCannonBody.position.x + fwd.x * 1.85;
       const bz  = chassisCannonBody.position.z + fwd.z * 1.85;
-      if (clearSnow(bx, bz, 1.3)) texDirty = true;
+      if (clearSnow(bx, bz, 1.85)) texDirty = true;
       // brush particles
       if (Math.random() < 0.4) {
         spawnParticle(brushPool, bx + (Math.random()-0.5)*2.2, 0.3, bz + (Math.random()-0.5)*2.2,
@@ -1144,6 +1329,7 @@ function animate() {
 
     // Spreader
     if (spreaderOn && Math.random() < 0.5) {
+      playSpreaderSound();
       const bk = chassisCannonBody.vectorToWorldFrame(new CANNON.Vec3(0, 0, -1));
       spawnParticle(spreadPool,
         chassisCannonBody.position.x + bk.x*1.8 + (Math.random()-0.5)*1.5,
@@ -1177,8 +1363,31 @@ function animate() {
       if (keys['KeyA']) playerPed.rotation.y += 0.04;
       if (keys['KeyD']) playerPed.rotation.y -= 0.04;
 
+      // Schaufel-Animation
+      if (shovelAnim > 0) {
+        shovelAnim -= dt;
+        const phase = shovelAnim * Math.PI * 6;
+        playerPed.rotation.z = Math.sin(phase) * 0.3;
+        // Schnee-Partikel vor der Figur spawnen
+        if (Math.random() < 0.5) {
+          const fwdX = -Math.sin(playerPed.rotation.y);
+          const fwdZ = -Math.cos(playerPed.rotation.y);
+          spawnParticle(shovelPool,
+            playerPed.position.x + fwdX * (0.5 + Math.random() * 0.8),
+            0.3 + Math.random() * 0.4,
+            playerPed.position.z + fwdZ * (0.5 + Math.random() * 0.8),
+            fwdX * (1 + Math.random() * 2) + (Math.random()-0.5),
+            Math.random() * 2 + 0.5,
+            fwdZ * (1 + Math.random() * 2) + (Math.random()-0.5),
+            0.5);
+        }
+        // Schnee in Radius 1.5m räumen
+        if (clearSnow(playerPed.position.x, playerPed.position.z, 1.5)) texDirty = true;
+        if (shovelAnim <= 0) { playerPed.rotation.z = 0; }
+      }
+
       const camOff = new THREE.Vector3(
-        Math.sin(playerPed.rotation.y) * 6, 4, Math.cos(playerPed.rotation.y) * 6
+        Math.sin(playerPed.rotation.y) * 5, 3, Math.cos(playerPed.rotation.y) * 5
       );
       camera.position.lerp(playerPed.position.clone().add(camOff), 0.1);
       camera.lookAt(playerPed.position.x, playerPed.position.y + 1, playerPed.position.z);
@@ -1220,9 +1429,19 @@ function animate() {
         4 + Math.random()*3);
     }
   }
-  updatePool(snowPool,  dt, 0);
-  updatePool(brushPool, dt, 5);
-  updatePool(spreadPool, dt, 6);
+  updatePool(snowPool,    dt, 0);
+  updatePool(brushPool,   dt, 5);
+  updatePool(spreadPool,  dt, 6);
+  updatePool(collisionPool, dt, 8);
+  updatePool(shovelPool,  dt, 4);
+
+  // ---- Kollisions-Flash ----
+  if (collisionFlash > 0) {
+    collisionFlash -= dt;
+    document.getElementById('hud').style.boxShadow =
+      collisionFlash > 0 ? 'inset 0 0 0 3px red' : 'none';
+    if (collisionFlash <= 0) document.getElementById('hud').style.boxShadow = 'none';
+  }
 
   // ---- Snow refill ----
   if (snowRefill > 0) {
