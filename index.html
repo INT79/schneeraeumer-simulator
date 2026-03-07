@@ -450,7 +450,7 @@ const snowGrid = new Float32Array(GRID * GRID).fill(1);
 const GRIT_MAX = 3.0;
 const gritGrid = new Float32Array(GRID * GRID).fill(0);
 const gritCvs = document.createElement('canvas');
-gritCvs.width = gritCvs.height = 1024;
+gritCvs.width = gritCvs.height = 512;
 const gritCtx = gritCvs.getContext('2d');
 const gritTex = new THREE.CanvasTexture(gritCvs);
 
@@ -464,9 +464,9 @@ let snowDirtyMin = [0, 0], snowDirtyMax = [GRID, GRID];
 let gritDirtyMin = [0, 0], gritDirtyMax = [GRID, GRID];
 
 function rebuildSnowTex() {
-  const cw = 1024 / GRID;
+  const cw = snowCvs.width / GRID; // Dynamisch an Canvas-Größe angepasst
   // Komplett transparent: geräumte Bereiche zeigen den echten Untergrund (Straße, Gehweg, Grünstreifen)
-  snowCtx.clearRect(0, 0, 1024, 1024);
+  snowCtx.clearRect(0, 0, snowCvs.width, snowCvs.height);
   for (let i = 0; i < GRID; i++) {
     for (let j = 0; j < GRID; j++) {
       const v = snowGrid[i * GRID + j];
