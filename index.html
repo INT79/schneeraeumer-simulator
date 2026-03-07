@@ -196,27 +196,46 @@ const snowTex = new THREE.CanvasTexture(snowCvs);
 
 function rebuildSnowTex() {
   const cw = 512 / GRID;
+  // Hintergrund: transparent (wird durch Alphakanal gesteuert)
+  snowCtx.clearRect(0, 0, 512, 512);
   for (let i = 0; i < GRID; i++) {
     for (let j = 0; j < GRID; j++) {
       const v = snowGrid[i * GRID + j];
-      const r = Math.round(42  + v * 200);
-      const g = Math.round(42  + v * 202);
-      const b = Math.round(42  + v * 207);
-      snowCtx.fillStyle = `rgb(${r},${g},${b})`;
-      snowCtx.fillRect(i * cw, j * cw, cw + 1, cw + 1);
+      if (v > 0.02) {
+        // Weiß mit Alpha entsprechend Schneemenge
+        const alpha = Math.min(1, v * 1.1);
+        snowCtx.fillStyle = `rgba(240,245,255,${alpha.toFixed(2)})`;
+        snowCtx.fillRect(i * cw, j * cw, cw + 1, cw + 1);
+      }
     }
   }
   snowTex.needsUpdate = true;
 }
 rebuildSnowTex();
 
-// ---- Ground ----
+// ---- Ground (Asphalt-Basis) ----
 const groundGeo = new THREE.PlaneGeometry(MSIZE, MSIZE);
-const groundMat = new THREE.MeshLambertMaterial({ map: snowTex });
+const groundMat = new THREE.MeshLambertMaterial({ color: 0x888888 });
 const groundMesh = new THREE.Mesh(groundGeo, groundMat);
 groundMesh.rotation.x = -Math.PI / 2;
 groundMesh.receiveShadow = true;
 scene.add(groundMesh);
+
+// ---- Schnee-Overlay (liegt ÜBER allen Straßen/Gehwegen) ----
+const snowOverlayGeo = new THREE.PlaneGeometry(MSIZE, MSIZE);
+const snowOverlayMat = new THREE.MeshLambertMaterial({
+  map: snowTex,
+  transparent: true,
+  opacity: 1.0,
+  depthWrite: false,
+  polygonOffset: true,
+  polygonOffsetFactor: -1,
+  polygonOffsetUnits: -1
+});
+const snowOverlay = new THREE.Mesh(snowOverlayGeo, snowOverlayMat);
+snowOverlay.rotation.x = -Math.PI / 2;
+snowOverlay.position.y = 0.08; // Über allen Straßenplatten (max y=0.055)
+scene.add(snowOverlay);
 
 const gBody = new CANNON.Body({ mass: 0, material: matGround });
 gBody.addShape(new CANNON.Plane());
@@ -423,13 +442,16 @@ function addLantern(px, pz) {
   g.add(pole);
   const arm  = box(0.6, 0.06, 0.06, 0x555555, 0.3, 5.55, 0);
   g.add(arm);
-  const head = box(0.3, 0.2, 0.3, 0xffee88, 0.6, 5.6, 0);
+  const headMat = new THREE.MeshLambertMaterial({ color: 0xffee88, emissive: new THREE.Color(0xffcc44), emissiveIntensity: 0 });
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.2, 0.3), headMat);
+  head.position.set(0.6, 5.6, 0);
   g.add(head);
-  const pl = new THREE.PointLight(0xffcc55, 0, 18);
+  const pl = new THREE.PointLight(0xffcc55, 0, 22);
   pl.position.set(0.6, 5.55, 0);
   g.add(pl);
   g.position.set(px, 0, pz);
   g.userData.pointLight = pl;
+  g.userData.headMat = headMat;
   scene.add(g);
   lanterns.push(g);
 }
@@ -759,11 +781,11 @@ const snowPool   = [];
 const brushPool  = [];
 const spreadPool = [];
 
-const sm = new THREE.MeshLambertMaterial({ color: 0xffffff });
+const sm = new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: new THREE.Color(0xaaccff), emissiveIntensity: 0.3 });
 const bm = new THREE.MeshLambertMaterial({ color: 0xddeeff });
 const pm = new THREE.MeshLambertMaterial({ color: 0xaa8833 });
-const sg = new THREE.SphereGeometry(0.05, 4, 4);
-const sg2 = new THREE.SphereGeometry(0.07, 4, 4);
+const sg = new THREE.SphereGeometry(0.12, 4, 4);  // größer: 0.05 → 0.12
+const sg2 = new THREE.SphereGeometry(0.10, 4, 4);
 
 for (let i = 0; i < SNOW_POOL; i++) {
   const m = new THREE.Mesh(sg, sm);
@@ -1005,7 +1027,6 @@ function clearSnow(wx, wz, rad) {
 //  DAY / NIGHT
 // ================================================================
 function updateDayNight(dt) {
-  if (weather === 'night') return;
   gameTime += dt * GAME_SPD;
   if (gameTime >= 86400) gameTime -= 86400;
 
@@ -1041,7 +1062,10 @@ function updateDayNight(dt) {
   }
 
   const lightsOn = h < 6.5 || h > 19.5;
-  lanterns.forEach(l => { l.userData.pointLight.intensity = lightsOn ? 1.5 : 0; });
+  lanterns.forEach(l => {
+    l.userData.pointLight.intensity = lightsOn ? 1.5 : 0;
+    if (l.userData.headMat) l.userData.headMat.emissiveIntensity = lightsOn ? 1.0 : 0;
+  });
   const hdsOn = h < 7 || h > 19;
   headL.intensity = hdsOn ? 3 : 0;
   headR.intensity = hdsOn ? 3 : 0;
@@ -1187,13 +1211,13 @@ function animate() {
   // ---- Snow weather particles ----
   const activeSnow = snowFallTarget;
   if (activeSnow > 0) {
-    const toSpawn = Math.floor(activeSnow * dt * 8);
+    const toSpawn = Math.floor(activeSnow * dt * 15);
     for (let i = 0; i < toSpawn; i++) {
-      const cx3 = camera.position.x + (Math.random()-0.5)*55;
-      const cz3 = camera.position.z + (Math.random()-0.5)*55;
-      spawnParticle(snowPool, cx3, camera.position.y + 12 + Math.random()*10, cz3,
-        (Math.random()-0.5)*0.4, -0.8 - Math.random()*0.5, (Math.random()-0.5)*0.4,
-        10 + Math.random()*5);
+      const cx3 = camera.position.x + (Math.random()-0.5)*40;
+      const cz3 = camera.position.z + (Math.random()-0.5)*40;
+      spawnParticle(snowPool, cx3, camera.position.y + 5 + Math.random()*8, cz3,
+        (Math.random()-0.5)*0.5, -2.5 - Math.random()*1.5, (Math.random()-0.5)*0.5,
+        4 + Math.random()*3);
     }
   }
   updatePool(snowPool,  dt, 0);
