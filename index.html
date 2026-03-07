@@ -278,36 +278,38 @@ const contactGV  = new CANNON.ContactMaterial(matGround, matVehicle, { friction:
 world.addContactMaterial(contactGV);
 
 // ---- Snow Grid ----
-const GRID  = 50;
+const GRID  = 200;
 const MSIZE = 300;
-const CELL  = MSIZE / GRID;
+const CELL  = MSIZE / GRID;  // = 1.5m pro Zelle → realistische Räumspur
 const snowGrid = new Float32Array(GRID * GRID).fill(1);
 
 // ---- Grit (Streugut) System ----
 const GRIT_MAX = 3.0;
 const gritGrid = new Float32Array(GRID * GRID).fill(0);
 const gritCvs = document.createElement('canvas');
-gritCvs.width = gritCvs.height = 512;
+gritCvs.width = gritCvs.height = 1024;
 const gritCtx = gritCvs.getContext('2d');
 const gritTex = new THREE.CanvasTexture(gritCvs);
 
 const snowCvs = document.createElement('canvas');
-snowCvs.width = snowCvs.height = 512;
+snowCvs.width = snowCvs.height = 1024;
 const snowCtx = snowCvs.getContext('2d');
 const snowTex = new THREE.CanvasTexture(snowCvs);
 
+// Dirty-Region-Tracking für partielle Texture-Updates (Performance)
+let snowDirtyMin = [0, 0], snowDirtyMax = [GRID, GRID];
+let gritDirtyMin = [0, 0], gritDirtyMax = [GRID, GRID];
+
 function rebuildSnowTex() {
-  const cw = 512 / GRID;
-  // Geräumte Zellen: dunkler Asphalt; Schnee: weiß
+  const cw = 1024 / GRID;
   snowCtx.fillStyle = 'rgba(60,60,65,0.95)';
-  snowCtx.fillRect(0, 0, 512, 512);
+  snowCtx.fillRect(0, 0, 1024, 1024);
   for (let i = 0; i < GRID; i++) {
     for (let j = 0; j < GRID; j++) {
       const v = snowGrid[i * GRID + j];
-      if (v > 0.05) {
-        // Schnee: weiß, scharfer Übergang
+      if (v > 0.02) {
         snowCtx.fillStyle = `rgba(240,245,255,${Math.min(1, v).toFixed(2)})`;
-        snowCtx.fillRect(i * cw, j * cw, cw + 1, cw + 1);
+        snowCtx.fillRect(Math.floor(i * cw), Math.floor(j * cw), Math.ceil(cw)+1, Math.ceil(cw)+1);
       }
     }
   }
@@ -316,15 +318,15 @@ function rebuildSnowTex() {
 rebuildSnowTex();
 
 function rebuildGritTex() {
-  gritCtx.clearRect(0, 0, 512, 512);
-  const cw = 512 / GRID;
+  gritCtx.clearRect(0, 0, 1024, 1024);
+  const cw = 1024 / GRID;
   for (let i = 0; i < GRID; i++) {
     for (let j = 0; j < GRID; j++) {
       const v = gritGrid[i * GRID + j];
       if (v > 0.05) {
         const alpha = Math.min(1, v / GRIT_MAX * 0.8);
         gritCtx.fillStyle = `rgba(180,140,60,${alpha.toFixed(2)})`;
-        gritCtx.fillRect(i * cw, j * cw, cw+1, cw+1);
+        gritCtx.fillRect(Math.floor(i * cw), Math.floor(j * cw), Math.ceil(cw)+1, Math.ceil(cw)+1);
       }
     }
   }
@@ -1419,11 +1421,13 @@ function animate() {
     }
 
     // Kamera folgt Fahrzeug in Fahrtrichtung
-    const camOffset = new THREE.Vector3(0, 5, -10); // hinter + oben
-    camOffset.applyQuaternion(vGroup.quaternion); // rotiert mit Fahrzeug
+    // Kamera folgt Fahrzeug - Offset in lokalem Fahrzeug-Koordinatensystem
+    const camOffset = new THREE.Vector3(0, 6, -12); // 12m hinter, 6m oben
+    camOffset.applyQuaternion(vGroup.quaternion);
     const targetCamPos = vGroup.position.clone().add(camOffset);
-    camera.position.lerp(targetCamPos, 0.1);
-    camera.lookAt(vGroup.position.clone().add(new THREE.Vector3(0, 1, 0)));
+    camera.position.lerp(targetCamPos, 0.18); // schnelleres Folgen
+    const lookTarget = vGroup.position.clone().add(new THREE.Vector3(0, 1.5, 0));
+    camera.lookAt(lookTarget);
 
   } else {
     // Pedestrian mode
