@@ -1611,11 +1611,15 @@ rayVehicle.addToWorld(world);
 
 // Kollisions-Event für Fahrzeug
 chassisCannonBody.addEventListener('collide', (e) => {
-  // Boden-Kollisionen ignorieren (Vollgas erzeugt sonst Phantom-Crashes)
-  const other = e.contact.bi === chassisCannonBody ? e.contact.bj : e.contact.bi;
-  if (other === gBody) return;
+  // Boden-Kollisionen ignorieren (Cannon.js e.body = der andere Körper – zuverlässiger als e.contact.bi/bj)
+  const other = e.body;
+  if (!other || other === gBody) return;
+  // Kein Crash bei Stillstand / sehr niedrigem Tempo (Anlauf-Artefakte)
+  const vel = chassisCannonBody.velocity;
+  const curSpd = Math.sqrt(vel.x*vel.x + vel.z*vel.z);
+  if (curSpd < 2.0) return;
   const relVel = e.contact.getImpactVelocityAlongNormal();
-  if (Math.abs(relVel) < 1.5) return; // zu schwacher Kontakt → ignorieren
+  if (Math.abs(relVel) < 2.0) return; // zu schwacher Kontakt → ignorieren
   if (collisionFlash > 0.3) return;   // kein Spam
   const contact = e.contact;
   const wPos = contact.bi === chassisCannonBody
