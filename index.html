@@ -2258,16 +2258,16 @@ function animate() {
     if (brushOn && spd > 0.3) {
       const brushWP = new THREE.Vector3();
       brushG.getWorldPosition(brushWP);
-      const bx = brushWP.x;
-      const bz = brushWP.z;
-      // CELL=2.5m → ±1.25m Versatz → trifft genau 2 benachbarte Zellen
-      const HC = CELL * 0.5;
-      if (clearSnowLine(bx - HC, bz, HC * 0.95, 1.0)) texDirty = true;
-      if (clearSnowLine(bx + HC, bz, HC * 0.95, 1.0)) texDirty = true;
-      // brush particles über beide Zellen verteilt
+      const bx = brushWP.x, bz = brushWP.z;
+      // Querrichtung des Fahrzeugs (Rechtsvektor im XZ-Raum) → Versatz immer ⊥ zur Fahrtrichtung
+      const rightVec = new THREE.Vector3(1, 0, 0).applyQuaternion(vGroup.quaternion);
+      const HC = CELL * 0.5; // 1.25m → 2 Zellen à 2.5m = 5m Gesamtbreite
+      if (clearSnowLine(bx + rightVec.x*HC, bz + rightVec.z*HC, HC*0.95, 1.0)) texDirty = true;
+      if (clearSnowLine(bx - rightVec.x*HC, bz - rightVec.z*HC, HC*0.95, 1.0)) texDirty = true;
+      // brush particles entlang der Querrichtung
       if (Math.random() < 0.5) {
-        const px = bx + (Math.random()-0.5) * CELL * 2;
-        spawnParticle(brushPool, px, 0.3, bz + (Math.random()-0.5)*1.5,
+        const t = (Math.random()-0.5) * CELL * 2;
+        spawnParticle(brushPool, bx + rightVec.x*t, 0.3, bz + rightVec.z*t,
           (Math.random()-0.5)*3, Math.random()*2+0.5, (Math.random()-0.5)*3, 0.6);
       }
       brushCyl.rotation.x += 10 * dt;
