@@ -717,19 +717,23 @@ function sidewalkSegments(streetWidth, crossings, totalHalf) {
 }
 
 // Bürgersteig segmentweise (stoppt vor Kreuzungen)
+// Bürgersteig-Querschnitt (von Straßenmitte nach außen):
+// Bordstein → Grünstreifen(Bäume) → Radweg → Gehweg → Kleinsteinpflaster → kleiner Grünstreifen → ZAUN
+// Main (halfW=7):  Zaun bei 13.5m  |  Side (halfW=4.5): Zaun bei 9.9m
 function buildFullSidewalk(cx, cz, halfW, segments, dir, isMain, side) {
   const s = side;
   const layers = isMain ? [
-    { off: halfW + 0.6,  w: 1.2, col: COL_GRUEN  },
-    { off: halfW + 1.8,  w: 1.0, col: COL_PARK   },
-    { off: halfW + 2.8,  w: 0.9, col: COL_PFLAST },
-    { off: halfW + 3.7,  w: 2.2, col: COL_GEHWEG, tex: getConcreteTex() },
-    { off: halfW + 5.9,  w: 1.5, col: COL_RADWEG },
+    { off: halfW + 0.6,  w: 1.2, col: COL_GRUEN  },               // Grünstreifen mit Bäumen (7.0–8.2m)
+    { off: halfW + 1.95, w: 1.5, col: COL_RADWEG },               // Radweg (8.2–9.7m)
+    { off: halfW + 3.8,  w: 2.2, col: COL_GEHWEG, tex: getConcreteTex() }, // Gehweg (9.7–11.9m)
+    { off: halfW + 5.4,  w: 1.0, col: COL_PFLAST },               // Kleinsteinpflaster (11.9–12.9m)
+    { off: halfW + 6.2,  w: 0.6, col: COL_GRUEN  },               // Kleiner Grünstreifen (12.9–13.5m) → danach Zaun
   ] : [
-    { off: halfW + 0.5,  w: 0.9, col: COL_GRUEN  },
-    { off: halfW + 1.4,  w: 0.8, col: COL_PFLAST },
-    { off: halfW + 2.2,  w: 1.6, col: COL_GEHWEG, tex: getConcreteTex() },
-    { off: halfW + 3.8,  w: 0.7, col: COL_RADWEG },
+    { off: halfW + 0.5,  w: 1.0, col: COL_GRUEN  },               // Grünstreifen mit Bäumen (4.5–5.5m)
+    { off: halfW + 1.65, w: 1.3, col: COL_RADWEG },               // Radweg (5.5–6.8m)
+    { off: halfW + 3.2,  w: 1.8, col: COL_GEHWEG, tex: getConcreteTex() }, // Gehweg (6.8–8.6m)
+    { off: halfW + 4.5,  w: 0.8, col: COL_PFLAST },               // Kleinsteinpflaster (8.6–9.4m)
+    { off: halfW + 5.15, w: 0.5, col: COL_GRUEN  },               // Kleiner Grünstreifen (9.4–9.9m) → danach Zaun
   ];
 
   for (const [segStart, segEnd] of segments) {
@@ -877,23 +881,24 @@ function initSnowRoads() {
 // Sofort aufrufen (nach DOM-Aufbau, Straßen sind bereits definiert)
 initSnowRoads();
 
-// Bäume im Grünstreifen der Hauptstraße (x=0): bei x=±8.5 (Grünstreifen ~7.6–8.8m vom Zentrum)
+// ================================================================
+// Bäume im inneren Grünstreifen (direkt an Bordstein, Schicht 1)
+// Hauptstraßen (halfW=7): Grünstreifen-Mitte bei ±7.6m vom Zentrum
+// Nebenstraßen (halfW=4.5): Grünstreifen-Mitte bei ±5.0m vom Straßenzentrum
+// ================================================================
+// N-S Hauptstraße (x=0): Bäume bei x=±7.6
+for (let t = -130; t <= 130; t += 10) { safeTree(-7.6, t); safeTree( 7.6, t); }
+// O-W Hauptstraße (z=0): Bäume bei z=±7.6
+for (let t = -130; t <= 130; t += 10) { safeTree(t, -7.6); safeTree(t,  7.6); }
+// N-S Nebenstraßen (x=±80): Bäume bei ±5.0m vom Zentrum
 for (let t = -130; t <= 130; t += 12) {
-  safeTree(-8.5, t);   // links der N-S-Hauptstraße
-  safeTree( 8.5, t);   // rechts
-  safeTree(t, -8.5);   // unterhalb der O-W-Hauptstraße
-  safeTree(t,  8.5);   // oberhalb
+  safeTree(-80 - 5.0, t); safeTree(-80 + 5.0, t);
+  safeTree( 80 - 5.0, t); safeTree( 80 + 5.0, t);
 }
-// Bäume an den Nebenstraßen (x=±80, Grünstreifen ~±5.5m vom Zentrum)
-for (let t = -130; t <= 130; t += 14) {
-  safeTree(-80 - 5.5, t);
-  safeTree(-80 + 5.5, t);
-  safeTree( 80 - 5.5, t);
-  safeTree( 80 + 5.5, t);
-  safeTree(t, -80 - 5.5);
-  safeTree(t, -80 + 5.5);
-  safeTree(t,  80 - 5.5);
-  safeTree(t,  80 + 5.5);
+// O-W Nebenstraßen (z=±80): Bäume bei ±5.0m vom Zentrum
+for (let t = -130; t <= 130; t += 12) {
+  safeTree(t, -80 - 5.0); safeTree(t, -80 + 5.0);
+  safeTree(t,  80 - 5.0); safeTree(t,  80 + 5.0);
 }
 
 // ================================================================
@@ -1204,21 +1209,7 @@ function addTree(px, pz) {
  [8,-80],[8,-48],[8,-12],[8,20],[8,56],[8,85],
  [-52,-60],[-52,22],[52,-42],[52,58]].forEach(([x,z]) => safeTree(x,z));
 
-// Systematische Bäume im Grünstreifen aller Hauptstraßen
-// NS-Straßen (x=-80, 0, +80): Bäume bei x±11, alle 8m
-[-80, 0, 80].forEach(roadX => {
-  for (let z = -130; z <= 130; z += 8) {
-    safeTree(roadX - 11, z);
-    safeTree(roadX + 11, z);
-  }
-});
-// OW-Straßen (z=-80, 0, +80): Bäume bei z±11, alle 8m
-[-80, 0, 80].forEach(roadZ => {
-  for (let x = -130; x <= 130; x += 8) {
-    safeTree(x, roadZ - 11);
-    safeTree(x, roadZ + 11);
-  }
-});
+// (Bäume im Grünstreifen werden über initSnowRoads-Block weiter oben gesetzt)
 
 // ================================================================
 //  GRUNDSTÜCKSZÄUNE + TORE (Property Fences + Animated Gates)
@@ -1324,8 +1315,11 @@ function addFenceLine(ax1, az1, ax2, az2, hasCar) {
 
 // Inner block boundaries (just past sidewalk edges)
 // Main street (hw=7m): fence at ±8m; Side street (hw=4.5m, at x=80): fence at 80±6m = 74/86
-const FA = 8;   // fence start near main street
-const FB = 74;  // fence start near side street (80 - 6 = 74)
+// Zaunpositionen an den echten Grundstücksgrenzen:
+// Main-Straße (halfW=7): Bürgersteig endet bei 13.5m vom Zentrum → FA=13.5
+// Neben-Straße (halfW=4.5, bei x/z=±80): Bürgersteig endet bei 80-9.9=70.1 → FB=70
+const FA = 13.5;
+const FB = 70;
 
 // Block NE (x=8..74, z=8..74)
 addFenceLine(FA, FA, FB, FA, Math.random() < 0.3);
