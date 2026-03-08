@@ -1189,26 +1189,11 @@ function addElecBox(px, pz) {
 }
 addElecBox(-6.2, -32); addElecBox(6.2, 18); addElecBox(-6.2, 62);
 
-// --- Bäume ---
+// --- Bäume (InstancedMesh) ---
+// Positionen sammeln; Meshes werden erst in finalizeInstanced() gebaut → 3 statt ~300 Draw Calls
+const _treeData = [];
 function addTree(px, pz) {
-  const g = new THREE.Group();
-  g.add(cyl(0.22, 0.28, 2.2, 8, 0x5c3010, 0, 1.1, 0));
-  const foliage = new THREE.Mesh(
-    new THREE.SphereGeometry(1.6, 8, 8),
-    new THREE.MeshLambertMaterial({ color: 0x2c5e20 })
-  );
-  foliage.position.set(0, 3.4, 0);
-  foliage.castShadow = true;
-  g.add(foliage);
-  // Snow cap
-  const sc = new THREE.Mesh(
-    new THREE.SphereGeometry(1.1, 8, 6, 0, Math.PI*2, 0, Math.PI*0.4),
-    new THREE.MeshLambertMaterial({ color: COL_SNOW })
-  );
-  sc.position.set(0, 4.4, 0);
-  g.add(sc);
-  g.position.set(px, 0, pz);
-  scene.add(g);
+  _treeData.push(px, pz); // flaches Array: [x0,z0, x1,z1, ...]
 }
 // Hardcodierte Bäume – nur wenn nicht auf Straße
 [[-8,-92],[-8,-62],[-8,-30],[-8,28],[-8,64],[-8,90],
@@ -1222,16 +1207,17 @@ function addTree(px, pz) {
 // ================================================================
 const gates = []; // { wrapper, pivot, state, timer, type, pos }
 
+// Zaunpfosten-Positionen sammeln; Meshes in finalizeInstanced() → 1 statt ~1100 Draw Calls
+const _fencePostXZ = []; // flaches Array: [x0,z0, x1,z1, ...]
 function buildFenceStretch(x1, z1, x2, z2) {
   const dx = x2-x1, dz = z2-z1;
   const len = Math.hypot(dx, dz);
   if (len < 0.1) return;
   const ay = Math.atan2(dz, dx);
-  const numSegs = Math.max(1, Math.round(len / 2));
+  const numSegs = Math.max(1, Math.round(len / 3)); // 3m Abstand (war 2m) → 33% weniger Pfosten
   for (let i = 0; i <= numSegs; i++) {
     const t = i / numSegs;
-    const post = cyl(0.07, 0.07, 1.2, 8, 0x888888, x1+dx*t, 0.6, z1+dz*t);
-    scene.add(post);
+    _fencePostXZ.push(x1 + dx*t, z1 + dz*t);
   }
   const midX = (x1+x2)/2, midZ = (z1+z2)/2;
   scene.add(box(len, 0.05, 0.05, 0x888888, midX, 0.4,  midZ, -ay));
@@ -1350,6 +1336,60 @@ addFenceLine(-FB, FA, -FA, FA, Math.random() < 0.3);
 addFenceLine(-FB, FB, -FA, FB, Math.random() < 0.3);
 addFenceLine(-FB, FA, -FB, FB, false);
 addFenceLine(-FA, FA, -FA, FB, Math.random() < 0.3);
+
+// ================================================================
+//  INSTANCED MESHES – Bäume + Zaunpfosten in je 1 Draw Call
+// ================================================================
+(function finalizeInstanced() {
+  const dummy = new THREE.Object3D();
+
+  // ---- Zaunpfosten InstancedMesh ----
+  if (_fencePostXZ.length > 0) {
+    const n = _fencePostXZ.length / 2;
+    const geo = new THREE.CylinderGeometry(0.07, 0.07, 1.2, 6, 1);
+    const mat = new THREE.MeshLambertMaterial({ color: 0x888888 });
+    const im  = new THREE.InstancedMesh(geo, mat, n);
+    im.castShadow = false; im.receiveShadow = false;
+    for (let i = 0; i < n; i++) {
+      dummy.position.set(_fencePostXZ[i*2], 0.6, _fencePostXZ[i*2+1]);
+      dummy.updateMatrix();
+      im.setMatrixAt(i, dummy.matrix);
+    }
+    im.instanceMatrix.needsUpdate = true;
+    scene.add(im);
+  }
+
+  // ---- Bäume InstancedMesh (Stamm + Krone + Schneekappe) ----
+  if (_treeData.length > 0) {
+    const n = _treeData.length / 2;
+    // Stamm
+    const trG = new THREE.CylinderGeometry(0.22, 0.28, 2.2, 6, 1);
+    const trM = new THREE.MeshLambertMaterial({ color: 0x5c3010 });
+    const trunks = new THREE.InstancedMesh(trG, trM, n);
+    trunks.castShadow = false;
+    // Krone
+    const foG = new THREE.SphereGeometry(1.6, 7, 6);
+    const foM = new THREE.MeshLambertMaterial({ color: 0x2c5e20 });
+    const crowns = new THREE.InstancedMesh(foG, foM, n);
+    crowns.castShadow = true;
+    // Schneekappe
+    const scG = new THREE.SphereGeometry(1.1, 6, 5, 0, Math.PI*2, 0, Math.PI*0.4);
+    const scM = new THREE.MeshLambertMaterial({ color: COL_SNOW });
+    const caps = new THREE.InstancedMesh(scG, scM, n);
+    caps.castShadow = false;
+
+    for (let i = 0; i < n; i++) {
+      const x = _treeData[i*2], z = _treeData[i*2+1];
+      dummy.position.set(x, 1.1, z); dummy.updateMatrix(); trunks.setMatrixAt(i, dummy.matrix);
+      dummy.position.y = 3.4;        dummy.updateMatrix(); crowns.setMatrixAt(i, dummy.matrix);
+      dummy.position.y = 4.4;        dummy.updateMatrix(); caps.setMatrixAt(i, dummy.matrix);
+    }
+    trunks.instanceMatrix.needsUpdate = true;
+    crowns.instanceMatrix.needsUpdate = true;
+    caps.instanceMatrix.needsUpdate = true;
+    scene.add(trunks); scene.add(crowns); scene.add(caps);
+  }
+})();
 
 // --- Schilder ---
 function addSign(px, pz, type) {
