@@ -1617,8 +1617,11 @@ rayVehicle.addToWorld(world);
 
 // Kollisions-Event für Fahrzeug
 chassisCannonBody.addEventListener('collide', (e) => {
+  // Boden-Kollisionen ignorieren (Vollgas erzeugt sonst Phantom-Crashes)
+  const other = e.contact.bi === chassisCannonBody ? e.contact.bj : e.contact.bi;
+  if (other === gBody) return;
   const relVel = e.contact.getImpactVelocityAlongNormal();
-  if (Math.abs(relVel) < 1.0) return; // zu schwacher Kontakt → ignorieren
+  if (Math.abs(relVel) < 1.5) return; // zu schwacher Kontakt → ignorieren
   if (collisionFlash > 0.3) return;   // kein Spam
   const contact = e.contact;
   const wPos = contact.bi === chassisCannonBody
@@ -2227,19 +2230,20 @@ function animate() {
       updateBrushSound(brushOn && spd > 0.5);
     }
 
-    // Snow clearing — rechts vom Fahrzeug, schmale Spur (1/4 Fahrzeugbreite)
+    // Snow clearing — 2 Zellen nebeneinander (5m Gesamtbreite)
     if (brushOn && spd > 0.3) {
-      // Brush-Position: Bürstenworld-Position (brushG liegt 1.65m vorne) + 0.8m nach rechts
       const brushWP = new THREE.Vector3();
       brushG.getWorldPosition(brushWP);
-      const right = new THREE.Vector3(1, 0, 0).applyQuaternion(vGroup.quaternion);
-      const bx = brushWP.x + right.x * 0.8;
-      const bz = brushWP.z + right.z * 0.8;
-      // halfWidth = 0.5m → 1m Gesamtbreite (schrittweises Räumen)
-      if (clearSnowLine(bx, bz, 0.5, 0.25)) texDirty = true;
-      // brush particles
-      if (Math.random() < 0.4) {
-        spawnParticle(brushPool, bx + (Math.random()-0.5)*1.0, 0.3, bz + (Math.random()-0.5)*1.0,
+      const bx = brushWP.x;
+      const bz = brushWP.z;
+      // CELL=2.5m → ±1.25m Versatz → trifft genau 2 benachbarte Zellen
+      const HC = CELL * 0.5;
+      if (clearSnowLine(bx - HC, bz, HC * 0.95, 1.0)) texDirty = true;
+      if (clearSnowLine(bx + HC, bz, HC * 0.95, 1.0)) texDirty = true;
+      // brush particles über beide Zellen verteilt
+      if (Math.random() < 0.5) {
+        const px = bx + (Math.random()-0.5) * CELL * 2;
+        spawnParticle(brushPool, px, 0.3, bz + (Math.random()-0.5)*1.5,
           (Math.random()-0.5)*3, Math.random()*2+0.5, (Math.random()-0.5)*3, 0.6);
       }
       brushCyl.rotation.x += 10 * dt;
