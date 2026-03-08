@@ -2098,7 +2098,7 @@ function clearSnow(wx, wz, rad) {
   return chg;
 }
 function clearSnowLine(wx, wz, halfWidth, amount, halfDepth) {
-  // halfDepth: Tiefe in Fahrtrichtung (Z). Default = CELL/2 = 1 Zelle tief
+  // halfDepth: Tiefe in Fahrtrichtung (Z). Default = halfWidth
   if (halfDepth === undefined) halfDepth = halfWidth;
   const ci = Math.floor((wx + MSIZE/2) / CELL);
   const cj = Math.floor((wz + MSIZE/2) / CELL);
@@ -2112,10 +2112,34 @@ function clearSnowLine(wx, wz, halfWidth, amount, halfDepth) {
       const dz = (j - cj) * CELL;
       if (Math.abs(dx) <= halfWidth && Math.abs(dz) <= halfDepth) {
         const idx = i * GRID + j;
-        if (snowGrid[idx] > 0) {
-          snowGrid[idx] = Math.max(0, snowGrid[idx] - amount);
-          changed = true;
-        }
+        if (snowGrid[idx] > 0) { snowGrid[idx] = Math.max(0, snowGrid[idx] - amount); changed = true; }
+      }
+    }
+  }
+  return changed;
+}
+
+// Rotiertes Rechteck räumen – berücksichtigt Fahrzeugausrichtung
+// angle: Fahrzeug-Yaw (rad); halfW: Bürstenbreite/2 (quer zur Fahrtrichtung); halfD: Tiefe entlang Fahrtrichtung
+function clearSnowRotated(cx, cz, halfW, halfD, angle, amount) {
+  const cosA = Math.cos(angle), sinA = Math.sin(angle);
+  const r = Math.ceil(Math.max(halfW, halfD) / CELL) + 1;
+  const ci = Math.floor((cx + MSIZE/2) / CELL);
+  const cj = Math.floor((cz + MSIZE/2) / CELL);
+  let changed = false;
+  for (let i = ci-r; i <= ci+r; i++) {
+    for (let j = cj-r; j <= cj+r; j++) {
+      if (i < 0 || i >= GRID || j < 0 || j >= GRID) continue;
+      // Zellmitte in Weltkoordinaten
+      const wx2 = (i + 0.5) * CELL - MSIZE/2;
+      const wz2 = (j + 0.5) * CELL - MSIZE/2;
+      const dx = wx2 - cx, dz = wz2 - cz;
+      // In lokales Bürsten-KS drehen (angle = Fahrzeug-Yaw → Bürstenbreite liegt auf lokalem X)
+      const localX =  dx * cosA + dz * sinA;   // quer zur Fahrtrichtung (Bürstenbreite)
+      const localZ = -dx * sinA + dz * cosA;   // entlang Fahrtrichtung (Räumtiefe)
+      if (Math.abs(localX) <= halfW && Math.abs(localZ) <= halfD) {
+        const idx = i * GRID + j;
+        if (snowGrid[idx] > 0) { snowGrid[idx] = Math.max(0, snowGrid[idx] - amount); changed = true; }
       }
     }
   }
@@ -2259,12 +2283,13 @@ function animate() {
       const brushWP = new THREE.Vector3();
       brushG.getWorldPosition(brushWP);
       const bx = brushWP.x, bz = brushWP.z;
-      // Querrichtung des Fahrzeugs (Rechtsvektor im XZ-Raum) → Versatz immer ⊥ zur Fahrtrichtung
+      // Fahrzeug-Yaw aus Quaternion extrahieren (stabil auch bei kleinem Roll/Pitch)
+      const q = vGroup.quaternion;
+      const brushAngle = Math.atan2(2*(q.y*q.w + q.x*q.z), 1 - 2*(q.y*q.y + q.z*q.z));
+      // Rotiertes Rechteck: 2 Zellen breit (5m) quer, 1 Zelle tief (2.5m) entlang Fahrtrichtung
+      if (clearSnowRotated(bx, bz, CELL, CELL * 0.55, brushAngle, 1.0)) texDirty = true;
+      // Partikel quer zur Fahrtrichtung verteilen
       const rightVec = new THREE.Vector3(1, 0, 0).applyQuaternion(vGroup.quaternion);
-      const HC = CELL * 0.5; // 1.25m → 2 Zellen à 2.5m = 5m Gesamtbreite
-      if (clearSnowLine(bx + rightVec.x*HC, bz + rightVec.z*HC, HC*0.95, 1.0)) texDirty = true;
-      if (clearSnowLine(bx - rightVec.x*HC, bz - rightVec.z*HC, HC*0.95, 1.0)) texDirty = true;
-      // brush particles entlang der Querrichtung
       if (Math.random() < 0.5) {
         const t = (Math.random()-0.5) * CELL * 2;
         spawnParticle(brushPool, bx + rightVec.x*t, 0.3, bz + rightVec.z*t,
