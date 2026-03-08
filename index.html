@@ -718,22 +718,24 @@ function sidewalkSegments(streetWidth, crossings, totalHalf) {
 
 // Bürgersteig segmentweise (stoppt vor Kreuzungen)
 // Bürgersteig-Querschnitt (von Straßenmitte nach außen):
-// Bordstein → Grünstreifen(Bäume) → Radweg → Gehweg → Kleinsteinpflaster → kleiner Grünstreifen → ZAUN
-// Main (halfW=7):  Zaun bei 13.5m  |  Side (halfW=4.5): Zaun bei 9.9m
+// Bordstein → Grünstreifen(Bäume) → PARKSTREIFEN(PKW) → Radweg → Gehweg → Pflaster → kl. Grünstreifen → ZAUN
+// Main (halfW=7): Zaun bei 15.2m  |  Side (halfW=4.5): Zaun bei 11.0m
 function buildFullSidewalk(cx, cz, halfW, segments, dir, isMain, side) {
   const s = side;
   const layers = isMain ? [
-    { off: halfW + 0.6,  w: 1.2, col: COL_GRUEN  },               // Grünstreifen mit Bäumen (7.0–8.2m)
-    { off: halfW + 1.95, w: 1.5, col: COL_RADWEG },               // Radweg (8.2–9.7m)
-    { off: halfW + 3.8,  w: 2.2, col: COL_GEHWEG, tex: getConcreteTex() }, // Gehweg (9.7–11.9m)
-    { off: halfW + 5.4,  w: 1.0, col: COL_PFLAST },               // Kleinsteinpflaster (11.9–12.9m)
-    { off: halfW + 6.2,  w: 0.6, col: COL_GRUEN  },               // Kleiner Grünstreifen (12.9–13.5m) → danach Zaun
+    { off: halfW + 0.5,  w: 1.0, col: COL_GRUEN  },               // Grünstreifen (7.0–8.0m) ← Bäume hier
+    { off: halfW + 2.1,  w: 2.2, col: COL_PARK   },               // Parkstreifen (8.0–10.2m) ← PKW hier
+    { off: halfW + 3.95, w: 1.5, col: COL_RADWEG },               // Radweg (10.2–11.7m)
+    { off: halfW + 5.7,  w: 2.0, col: COL_GEHWEG, tex: getConcreteTex() }, // Gehweg (11.7–13.7m)
+    { off: halfW + 7.45, w: 0.9, col: COL_PFLAST },               // Kleinsteinpflaster (13.7–14.6m)
+    { off: halfW + 8.2,  w: 0.6, col: COL_GRUEN  },               // Kleiner Grünstreifen (14.6–15.2m) → ZAUN
   ] : [
-    { off: halfW + 0.5,  w: 1.0, col: COL_GRUEN  },               // Grünstreifen mit Bäumen (4.5–5.5m)
-    { off: halfW + 1.65, w: 1.3, col: COL_RADWEG },               // Radweg (5.5–6.8m)
-    { off: halfW + 3.2,  w: 1.8, col: COL_GEHWEG, tex: getConcreteTex() }, // Gehweg (6.8–8.6m)
-    { off: halfW + 4.5,  w: 0.8, col: COL_PFLAST },               // Kleinsteinpflaster (8.6–9.4m)
-    { off: halfW + 5.15, w: 0.5, col: COL_GRUEN  },               // Kleiner Grünstreifen (9.4–9.9m) → danach Zaun
+    { off: halfW + 0.4,  w: 0.8, col: COL_GRUEN  },               // Grünstreifen (4.5–5.3m) ← Bäume hier
+    { off: halfW + 1.7,  w: 1.8, col: COL_PARK   },               // Parkstreifen (5.3–7.1m) ← PKW hier
+    { off: halfW + 3.1,  w: 1.2, col: COL_RADWEG },               // Radweg (7.1–8.3m)
+    { off: halfW + 4.4,  w: 1.6, col: COL_GEHWEG, tex: getConcreteTex() }, // Gehweg (8.3–9.9m)
+    { off: halfW + 5.65, w: 0.7, col: COL_PFLAST },               // Kleinsteinpflaster (9.9–10.6m)
+    { off: halfW + 6.15, w: 0.4, col: COL_GRUEN  },               // Kleiner Grünstreifen (10.6–11.0m) → ZAUN
   ];
 
   for (const [segStart, segEnd] of segments) {
@@ -859,8 +861,14 @@ function addTreeCollider(px, pz) {
   world.addBody(body);
   treeColliders.push(body);
 }
+// Kreuzungszonen – Bäume dürfen hier NICHT stehen
+const _INTER = [];
+[-80,0,80].forEach(x => [-80,0,80].forEach(z => _INTER.push({x,z})));
 function safeTree(px, pz) {
-  if (!onAnyRoad(px, pz)) { addTree(px, pz); /* kein Cannon-Collider: Abstandscheck im Spielcode */ }
+  if (onAnyRoad(px, pz)) return;
+  // Puffer 14m um jede Kreuzung → Bäume nicht mitten auf zusammentreffende Gehwege
+  if (_INTER.some(i => Math.hypot(px-i.x, pz-i.z) < 18)) return;
+  addTree(px, pz);
 }
 
 // Schnee-Initialisierung: Straßenzellen fast leer (durchscheinend),
@@ -886,19 +894,17 @@ initSnowRoads();
 // Hauptstraßen (halfW=7): Grünstreifen-Mitte bei ±7.6m vom Zentrum
 // Nebenstraßen (halfW=4.5): Grünstreifen-Mitte bei ±5.0m vom Straßenzentrum
 // ================================================================
-// N-S Hauptstraße (x=0): Bäume bei x=±7.6
-for (let t = -130; t <= 130; t += 10) { safeTree(-7.6, t); safeTree( 7.6, t); }
-// O-W Hauptstraße (z=0): Bäume bei z=±7.6
-for (let t = -130; t <= 130; t += 10) { safeTree(t, -7.6); safeTree(t,  7.6); }
-// N-S Nebenstraßen (x=±80): Bäume bei ±5.0m vom Zentrum
-for (let t = -130; t <= 130; t += 12) {
-  safeTree(-80 - 5.0, t); safeTree(-80 + 5.0, t);
-  safeTree( 80 - 5.0, t); safeTree( 80 + 5.0, t);
-}
-// O-W Nebenstraßen (z=±80): Bäume bei ±5.0m vom Zentrum
-for (let t = -130; t <= 130; t += 12) {
-  safeTree(t, -80 - 5.0); safeTree(t, -80 + 5.0);
-  safeTree(t,  80 - 5.0); safeTree(t,  80 + 5.0);
+// Bäume im inneren Grünstreifen (Schicht 1, direkt am Bordstein)
+// Main (halfW=7): Grünstreifen-Mitte bei 7+0.5=7.5m
+// Side (halfW=4.5): Grünstreifen-Mitte bei 4.5+0.4=4.9m
+// Kreuzungspuffer 14m per safeTree()
+for (let t = -130; t <= 130; t += 10) { safeTree(-7.5, t); safeTree( 7.5, t); } // NS Hauptstr.
+for (let t = -130; t <= 130; t += 10) { safeTree(t, -7.5); safeTree(t,  7.5); } // OW Hauptstr.
+for (let t = -130; t <= 130; t += 11) {                                           // Nebenstraßen
+  safeTree(-80-4.9, t); safeTree(-80+4.9, t);
+  safeTree( 80-4.9, t); safeTree( 80+4.9, t);
+  safeTree(t, -80-4.9); safeTree(t, -80+4.9);
+  safeTree(t,  80-4.9); safeTree(t,  80+4.9);
 }
 
 // ================================================================
@@ -1315,11 +1321,11 @@ function addFenceLine(ax1, az1, ax2, az2, hasCar) {
 
 // Inner block boundaries (just past sidewalk edges)
 // Main street (hw=7m): fence at ±8m; Side street (hw=4.5m, at x=80): fence at 80±6m = 74/86
-// Zaunpositionen an den echten Grundstücksgrenzen:
-// Main-Straße (halfW=7): Bürgersteig endet bei 13.5m vom Zentrum → FA=13.5
-// Neben-Straße (halfW=4.5, bei x/z=±80): Bürgersteig endet bei 80-9.9=70.1 → FB=70
-const FA = 13.5;
-const FB = 70;
+// Zaunpositionen (Grundstücksgrenze = Ende des Bürgersteigs):
+// Main (halfW=7 + 8.2m BW) = 15.2m → FA=15.2
+// Side (halfW=4.5 + 6.5m BW) = 11.0m → 80-11.0=69.0 → FB=69
+const FA = 15.2;
+const FB = 69;
 
 // Block NE (x=8..74, z=8..74)
 addFenceLine(FA, FA, FB, FA, Math.random() < 0.3);
@@ -1430,11 +1436,29 @@ function addParkedCar(px, pz, ry, ci) {
   world.addBody(cb);
 }
 
-[
-  [-9.5,-87,0,0],[-9.5,-75,0,2],[-9.5,-60,0,1],[-9.5,-30,0,4],
-  [-9.5, 18,0,3],[-9.5, 44,0,0],[-9.5, 71,0,5],
-  [9.5,-80,Math.PI,1],[9.5,-52,Math.PI,4],[9.5,-18,Math.PI,2],
-  [9.5,  7,Math.PI,0],[9.5, 34,Math.PI,3],[9.5, 66,Math.PI,1],[9.5, 87,Math.PI,5],
+// Parkende Autos im Parkstreifen (Mitte bei 9.1m vom Hauptstraßen-Zentrum)
+// NS-Hauptstraße (x=0): Autos bei x=±9.1
+// OW-Hauptstraße (z=0): Autos bei z=±9.1
+// Nebenstraßen (x/z=±80): Parkstreifen-Mitte bei ±6.2m vom Zentrum → 80±6.2
+;[
+  // NS Hauptstraße (x=0), linke Seite (x=-9.1, parallel zur Straße)
+  [-9.1,-87,0,0],[-9.1,-72,0,2],[-9.1,-57,0,1],[-9.1,-30,0,4],
+  [-9.1, 18,0,3],[-9.1, 40,0,0],[-9.1, 62,0,5],[-9.1, 80,0,2],
+  // NS Hauptstraße (x=0), rechte Seite (x=+9.1, gegenläufig)
+  [9.1,-82,Math.PI,1],[9.1,-60,Math.PI,4],[9.1,-38,Math.PI,2],[9.1,-16,Math.PI,0],
+  [9.1,  8,Math.PI,3],[9.1, 30,Math.PI,1],[9.1, 56,Math.PI,0],[9.1, 78,Math.PI,5],
+  // OW-Hauptstraße (z=0): Autos bei z=±9.1, entlang X-Achse
+  [-87,-9.1,Math.PI/2,0],[-65,-9.1,Math.PI/2,3],[-42,-9.1,Math.PI/2,1],[-18,-9.1,Math.PI/2,4],
+  [  8,-9.1,Math.PI/2,2],[ 32,-9.1,Math.PI/2,0],[ 60,-9.1,Math.PI/2,5],[ 82,-9.1,Math.PI/2,3],
+  [-82, 9.1,-Math.PI/2,1],[-58, 9.1,-Math.PI/2,4],[-35, 9.1,-Math.PI/2,2],[-12, 9.1,-Math.PI/2,0],
+  [ 14, 9.1,-Math.PI/2,5],[ 38, 9.1,-Math.PI/2,3],[  62, 9.1,-Math.PI/2,1],[84, 9.1,-Math.PI/2,0],
+  // Nebenstraße x=+80, links (x=73.8): parallel zur Straße
+  [73.8,-72,0,2],[73.8,-50,0,0],[73.8,-25,0,4],[73.8, 10,0,1],[73.8, 45,0,3],[73.8, 75,0,5],
+  // Nebenstraße x=+80, rechts (x=86.2)
+  [86.2,-60,Math.PI,1],[86.2,-35,Math.PI,3],[86.2,  5,Math.PI,0],[86.2, 35,Math.PI,4],[86.2, 65,Math.PI,2],
+  // Nebenstraße x=-80
+  [-73.8,-65,0,3],[-73.8,-40,0,1],[-73.8, 15,0,5],[-73.8, 50,0,2],[-73.8, 78,0,0],
+  [-86.2,-70,Math.PI,4],[-86.2,-30,Math.PI,2],[-86.2, 20,Math.PI,0],[-86.2, 60,Math.PI,3],
 ].forEach(([x,z,r,c]) => addParkedCar(x,z,r,c));
 
 // ================================================================
