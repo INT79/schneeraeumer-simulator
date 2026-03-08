@@ -2239,10 +2239,10 @@ function animate() {
 
     rayVehicle.setSteeringValue(steeringVal, 0);
     rayVehicle.setSteeringValue(steeringVal, 1);
-    // Geschwindigkeitslimit: 40 km/h = 11.1 m/s
+    // Geschwindigkeitslimit: 60 km/h = 16.7 m/s
     const vel = chassisCannonBody.velocity;
     const curSpd = Math.sqrt(vel.x*vel.x + vel.z*vel.z);
-    const speedCap = 11.1;
+    const speedCap = 16.7;
     const cappedForce = curSpd > speedCap ? 0 : -engineForce;
     rayVehicle.applyEngineForce(cappedForce, 2);
     rayVehicle.applyEngineForce(cappedForce, 3);
