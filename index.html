@@ -1738,14 +1738,16 @@ const trafficCars = [];
 // Mobile-Optimiert: max 16 Autos gesamt
 // N-S Hauptstraße (x=0): 2 pro Richtung
 for (let i = 0; i < 2; i++) {
-  trafficCars.push(spawnCar(-3.5, -100 + i*120, 'NS', +1, 2.5 + Math.random(), randomColor()));
-  trafficCars.push(spawnCar( 3.5,  100 - i*120, 'NS', -1, 2.0 + Math.random(), randomColor()));
+  // Rechtsverkehr: nordwärts (+Z, +1) auf östlicher Seite (+X), südwärts (-Z, -1) auf westlicher (-X)
+  trafficCars.push(spawnCar( 3.5, -100 + i*120, 'NS', +1, 2.5 + Math.random(), randomColor()));
+  trafficCars.push(spawnCar(-3.5,  100 - i*120, 'NS', -1, 2.0 + Math.random(), randomColor()));
 }
 // N-S Nebenstraßen: 1 pro Richtung
-trafficCars.push(spawnCar(-80-2.2, -80, 'NS', +1, 1.8, randomColor()));
-trafficCars.push(spawnCar(-80+2.2,  80, 'NS', -1, 1.5, randomColor()));
-trafficCars.push(spawnCar( 80-2.2, -80, 'NS', +1, 1.8, randomColor()));
-trafficCars.push(spawnCar( 80+2.2,  80, 'NS', -1, 1.5, randomColor()));
+// Nebenstraßen NS: nordwärts (+1) auf östlicher Seite, südwärts (-1) auf westlicher Seite
+trafficCars.push(spawnCar(-80+2.2, -80, 'NS', +1, 1.8, randomColor())); // x=-77.8 (Ostseite von x=-80)
+trafficCars.push(spawnCar(-80-2.2,  80, 'NS', -1, 1.5, randomColor())); // x=-82.2 (Westseite von x=-80)
+trafficCars.push(spawnCar( 80+2.2, -80, 'NS', +1, 1.8, randomColor())); // x=+82.2 (Ostseite von x=+80)
+trafficCars.push(spawnCar( 80-2.2,  80, 'NS', -1, 1.5, randomColor())); // x=+77.8 (Westseite von x=+80)
 // O-W Hauptstraße (z=0): 2 pro Richtung
 for (let i = 0; i < 2; i++) {
   trafficCars.push(spawnCar(-100 + i*120, -3.5, 'OW', +1, 2.5 + Math.random(), randomColor()));
