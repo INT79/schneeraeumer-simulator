@@ -1204,22 +1204,152 @@ function addTree(px, pz) {
  [8,-80],[8,-48],[8,-12],[8,20],[8,56],[8,85],
  [-52,-60],[-52,22],[52,-42],[52,58]].forEach(([x,z]) => safeTree(x,z));
 
-// --- Zäune ---
-function addFence(x1,z1,x2,z2,segs) {
-  const dx = (x2-x1)/segs, dz = (z2-z1)/segs;
-  for (let i = 0; i <= segs; i++) {
-    const m = box(0.07, 1.1, 0.07, 0x888888, x1+dx*i, 0.55, z1+dz*i);
-    scene.add(m);
+// Systematische Bäume im Grünstreifen aller Hauptstraßen
+// NS-Straßen (x=-80, 0, +80): Bäume bei x±11, alle 8m
+[-80, 0, 80].forEach(roadX => {
+  for (let z = -130; z <= 130; z += 8) {
+    safeTree(roadX - 11, z);
+    safeTree(roadX + 11, z);
   }
-  const len = Math.hypot(x2-x1, z2-z1);
-  const ay  = Math.atan2(z2-z1, x2-x1);
-  for (let h = 0; h < 2; h++) {
-    const bar = box(len, 0.05, 0.05, 0x888888, (x1+x2)/2, 0.4+h*0.5, (z1+z2)/2, -ay);
-    scene.add(bar);
+});
+// OW-Straßen (z=-80, 0, +80): Bäume bei z±11, alle 8m
+[-80, 0, 80].forEach(roadZ => {
+  for (let x = -130; x <= 130; x += 8) {
+    safeTree(x, roadZ - 11);
+    safeTree(x, roadZ + 11);
+  }
+});
+
+// ================================================================
+//  GRUNDSTÜCKSZÄUNE + TORE (Property Fences + Animated Gates)
+// ================================================================
+const gates = []; // { wrapper, pivot, state, timer, type, pos }
+
+function buildFenceStretch(x1, z1, x2, z2) {
+  const dx = x2-x1, dz = z2-z1;
+  const len = Math.hypot(dx, dz);
+  if (len < 0.1) return;
+  const ay = Math.atan2(dz, dx);
+  const numSegs = Math.max(1, Math.round(len / 2));
+  for (let i = 0; i <= numSegs; i++) {
+    const t = i / numSegs;
+    const post = cyl(0.07, 0.07, 1.2, 8, 0x888888, x1+dx*t, 0.6, z1+dz*t);
+    scene.add(post);
+  }
+  const midX = (x1+x2)/2, midZ = (z1+z2)/2;
+  scene.add(box(len, 0.05, 0.05, 0x888888, midX, 0.4,  midZ, -ay));
+  scene.add(box(len, 0.05, 0.05, 0x888888, midX, 0.85, midZ, -ay));
+}
+
+function addGate(x1, z1, x2, z2, type) {
+  const dx = x2-x1, dz = z2-z1;
+  const gWidth = Math.hypot(dx, dz);
+  if (gWidth < 0.1) return;
+  const fAngle = Math.atan2(dz, dx);
+
+  // Hinge + latch posts
+  scene.add(cyl(0.08, 0.08, 1.2, 8, 0x666666, x1, 0.6, z1));
+  scene.add(cyl(0.08, 0.08, 1.2, 8, 0x666666, x2, 0.6, z2));
+
+  // Wrapper group: fence-aligned (fixed, no animation)
+  const wrapper = new THREE.Group();
+  wrapper.position.set(x1, 0, z1);
+  wrapper.rotation.y = -fAngle; // local +X points along fence direction
+  scene.add(wrapper);
+
+  // Pivot group: child of wrapper, rotation.y: 0=closed, -PI/2=open
+  const pivot = new THREE.Group();
+  wrapper.add(pivot);
+
+  // Door geometry in pivot's local space (extends +X from hinge)
+  pivot.add(box(gWidth, 0.06, 0.05, 0x666666, gWidth/2, 0.35, 0));
+  pivot.add(box(gWidth, 0.06, 0.05, 0x666666, gWidth/2, 0.85, 0));
+  const nBars = Math.max(3, Math.round(gWidth * 2));
+  for (let i = 0; i <= nBars; i++) {
+    pivot.add(box(0.05, 0.9, 0.05, 0x888888, (i/nBars)*gWidth, 0.5, 0));
+  }
+
+  // Gate center for proximity detection
+  gates.push({
+    wrapper, pivot,
+    state: 'closed', timer: 0, type,
+    pos: { x: (x1+x2)/2, z: (z1+z2)/2 }
+  });
+}
+
+function addFenceLine(ax1, az1, ax2, az2, hasCar) {
+  const dx = ax2-ax1, dz = az2-az1;
+  const len = Math.hypot(dx, dz);
+  if (len < 2) return;
+
+  const pedFrac = 0.33;
+  const pedW = 1.0;
+  const pedStart = len * pedFrac - pedW/2;
+  const pedEnd   = pedStart + pedW;
+  const carFrac  = 0.67;
+  const carW     = 3.0;
+  const carStart = hasCar ? len * carFrac - carW/2 : null;
+  const carEnd   = hasCar ? carStart + carW : null;
+
+  function posAt(d) {
+    return [ax1 + (dx/len)*d, az1 + (dz/len)*d];
+  }
+
+  // Fence segment before ped gate
+  const [ps1x, ps1z] = posAt(0);
+  const [ps2x, ps2z] = posAt(Math.max(0, pedStart));
+  buildFenceStretch(ps1x, ps1z, ps2x, ps2z);
+
+  // Pedestrian gate
+  const [pg1x, pg1z] = posAt(pedStart);
+  const [pg2x, pg2z] = posAt(pedEnd);
+  addGate(pg1x, pg1z, pg2x, pg2z, 'ped');
+
+  if (hasCar && carStart !== null && carEnd !== null) {
+    const [s2x1, s2z1] = posAt(pedEnd);
+    const [s2x2, s2z2] = posAt(carStart);
+    buildFenceStretch(s2x1, s2z1, s2x2, s2z2);
+    const [cg1x, cg1z] = posAt(carStart);
+    const [cg2x, cg2z] = posAt(carEnd);
+    addGate(cg1x, cg1z, cg2x, cg2z, 'car');
+    const [s3x1, s3z1] = posAt(carEnd);
+    const [s3x2, s3z2] = posAt(len);
+    buildFenceStretch(s3x1, s3z1, s3x2, s3z2);
+  } else {
+    const [s2x1, s2z1] = posAt(pedEnd);
+    const [s2x2, s2z2] = posAt(len);
+    buildFenceStretch(s2x1, s2z1, s2x2, s2z2);
   }
 }
-addFence(-10,-94,-10,-46,5); addFence(10,-88,-10,-40,5);
-addFence(-10,  2,-10, 44,4); addFence(10, 12, 10, 54,4);
+
+// Inner block boundaries (just past sidewalk edges)
+// Main street (hw=7m): fence at ±8m; Side street (hw=4.5m, at x=80): fence at 80±6m = 74/86
+const FA = 8;   // fence start near main street
+const FB = 74;  // fence start near side street (80 - 6 = 74)
+
+// Block NE (x=8..74, z=8..74)
+addFenceLine(FA, FA, FB, FA, Math.random() < 0.3);
+addFenceLine(FA, FB, FB, FB, Math.random() < 0.3);
+addFenceLine(FA, FA, FA, FB, false);
+addFenceLine(FB, FA, FB, FB, Math.random() < 0.3);
+
+// Block SE (x=8..74, z=-74..-8)
+addFenceLine(FA, -FA, FB, -FA, Math.random() < 0.3);
+addFenceLine(FA, -FB, FB, -FB, Math.random() < 0.3);
+addFenceLine(FA, -FB, FA, -FA, false);
+addFenceLine(FB, -FB, FB, -FA, Math.random() < 0.3);
+
+// Block SW (x=-74..-8, z=-74..-8)
+addFenceLine(-FB, -FA, -FA, -FA, Math.random() < 0.3);
+addFenceLine(-FB, -FB, -FA, -FB, Math.random() < 0.3);
+addFenceLine(-FB, -FB, -FB, -FA, false);
+addFenceLine(-FA, -FB, -FA, -FA, Math.random() < 0.3);
+
+// Block NW (x=-74..-8, z=8..74)
+addFenceLine(-FB, FA, -FA, FA, Math.random() < 0.3);
+addFenceLine(-FB, FB, -FA, FB, Math.random() < 0.3);
+addFenceLine(-FB, FA, -FB, FB, false);
+addFenceLine(-FA, FA, -FA, FB, Math.random() < 0.3);
 
 // --- Schilder ---
 function addSign(px, pz, type) {
@@ -2097,14 +2227,18 @@ function animate() {
       updateBrushSound(brushOn && spd > 0.5);
     }
 
-    // Snow clearing — direkt unter dem Fahrzeug (schmale, präzise Spur)
+    // Snow clearing — an der echten Bürstenposition (vorne am Fahrzeug)
     if (brushOn && spd > 0.3) {
-      const bx  = vGroup.position.x;
-      const bz  = vGroup.position.z;
-      if (clearSnowLine(bx, bz, 1.5, 0.12)) texDirty = true; // Fahrzeugbreite 1.5m * 2 Seiten
+      // Bürstenposition in Weltkoordinaten berechnen (brushG ist Kind von vGroup, liegt 1.65m vorne)
+      const brushWP = new THREE.Vector3();
+      brushG.getWorldPosition(brushWP);
+      const bx = brushWP.x;
+      const bz = brushWP.z;
+      // halfWidth = 1.2m → 1 Zelle (CELL=2.5m), vollständig räumen (amount=1.0 = sofort weg)
+      if (clearSnowLine(bx, bz, 1.2, 1.0)) texDirty = true;
       // brush particles
       if (Math.random() < 0.4) {
-        spawnParticle(brushPool, bx + (Math.random()-0.5)*1.5, 0.3, bz + (Math.random()-0.5)*1.5,
+        spawnParticle(brushPool, bx + (Math.random()-0.5)*2.0, 0.3, bz + (Math.random()-0.5)*2.0,
           (Math.random()-0.5)*3, Math.random()*2+0.5, (Math.random()-0.5)*3, 0.6);
       }
       brushCyl.rotation.x += 10 * dt;
