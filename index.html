@@ -853,6 +853,10 @@ function onAnyRoad(px, pz) {
   return false;
 }
 
+// InstancedMesh-Sammel-Arrays – müssen VOR erster Nutzung deklariert sein
+const _treeData    = []; // flach: [x0,z0, x1,z1, ...]
+const _fencePostXZ = []; // flach: [x0,z0, x1,z1, ...]
+
 const treeColliders = [];
 function addTreeCollider(px, pz) {
   const shape = new CANNON.Cylinder(0.22, 0.22, 3.0, 8);
@@ -1190,10 +1194,9 @@ function addElecBox(px, pz) {
 addElecBox(-6.2, -32); addElecBox(6.2, 18); addElecBox(-6.2, 62);
 
 // --- Bäume (InstancedMesh) ---
-// Positionen sammeln; Meshes werden erst in finalizeInstanced() gebaut → 3 statt ~300 Draw Calls
-const _treeData = [];
+// Positionen werden in _treeData gesammelt (oben deklariert); Meshes in finalizeInstanced()
 function addTree(px, pz) {
-  _treeData.push(px, pz); // flaches Array: [x0,z0, x1,z1, ...]
+  _treeData.push(px, pz);
 }
 // Hardcodierte Bäume – nur wenn nicht auf Straße
 [[-8,-92],[-8,-62],[-8,-30],[-8,28],[-8,64],[-8,90],
@@ -1207,8 +1210,7 @@ function addTree(px, pz) {
 // ================================================================
 const gates = []; // { wrapper, pivot, state, timer, type, pos }
 
-// Zaunpfosten-Positionen sammeln; Meshes in finalizeInstanced() → 1 statt ~1100 Draw Calls
-const _fencePostXZ = []; // flaches Array: [x0,z0, x1,z1, ...]
+// Zaunpfosten: Positionen in _fencePostXZ sammeln (oben deklariert); Meshes in finalizeInstanced()
 function buildFenceStretch(x1, z1, x2, z2) {
   const dx = x2-x1, dz = z2-z1;
   const len = Math.hypot(dx, dz);
