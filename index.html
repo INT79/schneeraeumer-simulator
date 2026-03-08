@@ -2227,18 +2227,19 @@ function animate() {
       updateBrushSound(brushOn && spd > 0.5);
     }
 
-    // Snow clearing — an der echten Bürstenposition (vorne am Fahrzeug)
+    // Snow clearing — rechts vom Fahrzeug, schmale Spur (1/4 Fahrzeugbreite)
     if (brushOn && spd > 0.3) {
-      // Bürstenposition in Weltkoordinaten berechnen (brushG ist Kind von vGroup, liegt 1.65m vorne)
+      // Brush-Position: Bürstenworld-Position (brushG liegt 1.65m vorne) + 0.8m nach rechts
       const brushWP = new THREE.Vector3();
       brushG.getWorldPosition(brushWP);
-      const bx = brushWP.x;
-      const bz = brushWP.z;
-      // halfWidth = 1.2m → 1 Zelle (CELL=2.5m), vollständig räumen (amount=1.0 = sofort weg)
-      if (clearSnowLine(bx, bz, 1.2, 1.0)) texDirty = true;
+      const right = new THREE.Vector3(1, 0, 0).applyQuaternion(vGroup.quaternion);
+      const bx = brushWP.x + right.x * 0.8;
+      const bz = brushWP.z + right.z * 0.8;
+      // halfWidth = 0.5m → 1m Gesamtbreite (schrittweises Räumen)
+      if (clearSnowLine(bx, bz, 0.5, 0.25)) texDirty = true;
       // brush particles
       if (Math.random() < 0.4) {
-        spawnParticle(brushPool, bx + (Math.random()-0.5)*2.0, 0.3, bz + (Math.random()-0.5)*2.0,
+        spawnParticle(brushPool, bx + (Math.random()-0.5)*1.0, 0.3, bz + (Math.random()-0.5)*1.0,
           (Math.random()-0.5)*3, Math.random()*2+0.5, (Math.random()-0.5)*3, 0.6);
       }
       brushCyl.rotation.x += 10 * dt;
@@ -2370,6 +2371,67 @@ function animate() {
     car.body.angularVelocity.set(0, 0, 0);
     car.mesh.position.copy(car.body.position);
     car.mesh.position.y = 0;
+  });
+
+  // ---- Traffic Collision Detection (Proximity-Check) ----
+  if (!onFoot) {
+    const pv = chassisCannonBody.velocity;
+    const playerSpd = Math.sqrt(pv.x*pv.x + pv.z*pv.z);
+    trafficCars.forEach(car => {
+      const cdx = car.mesh.position.x - chassisCannonBody.position.x;
+      const cdz = car.mesh.position.z - chassisCannonBody.position.z;
+      const dist = Math.sqrt(cdx*cdx + cdz*cdz);
+      if (dist < 2.5 && collisionFlash <= 0.1) {
+        const relVel = playerSpd + car.speed;
+        if (relVel > 1.5) {
+          collisionFlash = 0.6;
+          playCrashSound();
+          // Kollisions-Partikel
+          for (let k = 0; k < 5; k++) {
+            spawnParticle(collisionPool,
+              chassisCannonBody.position.x + cdx*0.5,
+              0.8,
+              chassisCannonBody.position.z + cdz*0.5,
+              (Math.random()-0.5)*5, Math.random()*3+1, (Math.random()-0.5)*5, 0.7);
+          }
+        }
+      }
+    });
+  }
+
+  // ---- Gate Animation ----
+  const GATE_SPEED = (Math.PI/2) / 0.5; // 90° in 0.5s
+  const vPosG = chassisCannonBody.position;
+  const pedPosG = (onFoot && playerPed) ? playerPed.position : null;
+  gates.forEach(gate => {
+    const gx = gate.pos.x, gz = gate.pos.z;
+    const carDist = Math.hypot(gx - vPosG.x, gz - vPosG.z);
+    const pedDist = pedPosG ? Math.hypot(gx - pedPosG.x, gz - pedPosG.z) : 9999;
+    const shouldOpen = gate.type === 'ped' ? (pedDist < 1.5) : (carDist < 4.0);
+
+    if (gate.state === 'closed' && shouldOpen) {
+      gate.state = 'opening';
+    } else if (gate.state === 'open') {
+      if (!shouldOpen) {
+        gate.timer += dt;
+        if (gate.timer >= 3.0) { gate.state = 'closing'; gate.timer = 0; }
+      } else {
+        gate.timer = 0;
+      }
+    } else if (gate.state === 'opening') {
+      gate.pivot.rotation.y -= GATE_SPEED * dt;
+      if (gate.pivot.rotation.y <= -Math.PI/2) {
+        gate.pivot.rotation.y = -Math.PI/2;
+        gate.state = 'open';
+        gate.timer = 0;
+      }
+    } else if (gate.state === 'closing') {
+      gate.pivot.rotation.y += GATE_SPEED * dt;
+      if (gate.pivot.rotation.y >= 0) {
+        gate.pivot.rotation.y = 0;
+        gate.state = 'closed';
+      }
+    }
   });
 
   // ---- Pedestrians ----
