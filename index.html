@@ -671,9 +671,9 @@ function getConcreteTex() {
 
 // Hilfsfunktion: einzelnen Streifen neben der Straße (tex optional für Gehweg)
 function addStrip(cx, cz, w, len, dir, color, yOff, tex) {
-  const geo = dir === 'NS'
-    ? new THREE.PlaneGeometry(w, len)
-    : new THREE.PlaneGeometry(len, w);
+  // NS: w = Streifenbreite in X, len = Länge entlang Z
+  // OW: w = Länge entlang X, len = Streifenbreite in Z  → beide Male PlaneGeometry(w, len)
+  const geo = new THREE.PlaneGeometry(w, len);
   const matOpts = tex ? { map: tex } : { color };
   const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial(matOpts));
   mesh.rotation.x = -Math.PI / 2;
