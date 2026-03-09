@@ -2020,10 +2020,10 @@ function drawSpeedo(spd) {
   cx2d.beginPath();
   cx2d.arc(cx, cy, r-8, Math.PI*0.75, Math.PI*2.25);
   cx2d.strokeStyle = '#333'; cx2d.lineWidth = 10; cx2d.stroke();
-  const pct = Math.min(spd / 60, 1);
+  const pct = Math.min(spd / 40, 1);
   cx2d.beginPath();
   cx2d.arc(cx, cy, r-8, Math.PI*0.75, Math.PI*0.75 + pct*Math.PI*1.5);
-  cx2d.strokeStyle = spd < 30 ? '#00ff88' : spd < 50 ? '#ffaa00' : '#ff3300';
+  cx2d.strokeStyle = spd < 20 ? '#00ff88' : spd < 35 ? '#ffaa00' : '#ff3300';
   cx2d.lineWidth = 10; cx2d.stroke();
   cx2d.fillStyle = '#fff'; cx2d.font = 'bold 20px Arial'; cx2d.textAlign = 'center';
   cx2d.fillText(Math.round(spd), cx, cy);
@@ -2289,10 +2289,10 @@ function animate() {
 
     rayVehicle.setSteeringValue(steeringVal, 0);
     rayVehicle.setSteeringValue(steeringVal, 1);
-    // Geschwindigkeitslimit: 60 km/h = 16.7 m/s
+    // Geschwindigkeitslimit: 40 km/h = 11.1 m/s
     const vel = chassisCannonBody.velocity;
     const curSpd = Math.sqrt(vel.x*vel.x + vel.z*vel.z);
-    const speedCap = 16.7;
+    const speedCap = 11.1;
     const cappedForce = curSpd > speedCap ? 0 : -engineForce;
     rayVehicle.applyEngineForce(cappedForce, 2);
     rayVehicle.applyEngineForce(cappedForce, 3);
