@@ -408,15 +408,22 @@ function playCrashSound() {
 document.addEventListener('keydown', () => initAudio(), { once: true });
 document.addEventListener('click',   () => initAudio(), { once: true });
 
+// ---- Mobile Detection ----
+const isMobile = ('ontouchstart' in window || navigator.maxTouchPoints > 0) && window.innerWidth < 1100;
+
 // ---- Renderer ----
-const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gameCanvas'), antialias: true });
+const renderer = new THREE.WebGLRenderer({
+  canvas: document.getElementById('gameCanvas'),
+  antialias: !isMobile,           // Mobile: kein Antialiasing (großer Perf-Gewinn)
+  powerPreference: isMobile ? 'low-power' : 'high-performance'
+});
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.BasicShadowMap; // Mobile: weniger Aufwand
+renderer.setPixelRatio(isMobile ? Math.min(devicePixelRatio, 1) : Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = !isMobile;  // Mobile: keine Schatten
+renderer.shadowMap.type = THREE.BasicShadowMap;
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0xaabbcc, 0.006);
+scene.fog = new THREE.FogExp2(0xaabbcc, isMobile ? 0.012 : 0.006); // Mobile: stärkerer Fog = weniger Geometrie sichtbar
 
 const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 600);
 camera.position.set(0, 8, -32); // direkt hinter Fahrzeug (z=-20, offset -12)
@@ -432,7 +439,7 @@ window.addEventListener('resize', () => {
 const world = new CANNON.World();
 world.gravity.set(0, -9.82, 0);
 world.broadphase = new CANNON.SAPBroadphase(world);
-world.solver.iterations = 10;
+world.solver.iterations = isMobile ? 6 : 10;  // Mobile: weniger Physics-Iterationen
 world.allowSleep = false;
 
 const matGround  = new CANNON.Material('gnd');
@@ -1822,7 +1829,7 @@ spawnPed( 7.4,-78,-92,-28);
 // ================================================================
 //  PARTICLES
 // ================================================================
-const SNOW_POOL  = 250;
+const SNOW_POOL  = isMobile ? 80 : 250;  // Mobile: deutlich weniger Partikel
 const snowPool   = [];
 const brushPool  = [];
 const spreadPool = [];
@@ -2246,6 +2253,8 @@ let beaconT = 0;
 let texTimer = 0;
 let progTimer = 0;
 let texDirty  = false;
+let minimapTimer = 0;
+const MINIMAP_INTERVAL = isMobile ? 0.25 : 0.05; // Mobile: Minimap nur alle 250ms (war: jedes Frame)
 
 function animate() {
   requestAnimationFrame(animate);
@@ -2544,7 +2553,7 @@ function animate() {
   // ---- Snow weather particles ----
   const activeSnow = snowFallTarget;
   if (activeSnow > 0) {
-    const toSpawn = Math.floor(activeSnow * dt * 40); // 40 statt 15 = 2.5× dichter
+    const toSpawn = Math.floor(activeSnow * dt * (isMobile ? 15 : 40)); // Mobile: reduzierter Schnee
     const wind = activeSnow > 100 ? 1.5 : 0.3; // bei starkem Schnee: Wind
     for (let i = 0; i < toSpawn; i++) {
       const cx3 = camera.position.x + (Math.random()-0.5)*60;
@@ -2583,7 +2592,7 @@ function animate() {
 
   // ---- Texture update (throttled) ----
   texTimer += dt;
-  if (texDirty && texTimer > 0.12) {
+  if (texDirty && texTimer > (isMobile ? 0.22 : 0.12)) {
     rebuildSnowTex(); texTimer = 0; texDirty = false; progressDirty = true;
   }
 
@@ -2594,9 +2603,13 @@ function animate() {
   // ---- Day/Night ----
   updateDayNight(dt);
 
-  // ---- Minimap ----
-  const mpp = onFoot && playerPed ? playerPed.position : vGroup.position;
-  drawMinimap(mpp.x, mpp.z);
+  // ---- Minimap (throttled) ----
+  minimapTimer += dt;
+  if (minimapTimer >= MINIMAP_INTERVAL) {
+    minimapTimer = 0;
+    const mpp = onFoot && playerPed ? playerPed.position : vGroup.position;
+    drawMinimap(mpp.x, mpp.z);
+  }
 
   renderer.render(scene, camera);
 }
