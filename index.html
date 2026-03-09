@@ -414,8 +414,7 @@ const isMobile = ('ontouchstart' in window || navigator.maxTouchPoints > 0) && w
 // ---- Renderer ----
 const renderer = new THREE.WebGLRenderer({
   canvas: document.getElementById('gameCanvas'),
-  antialias: !isMobile,           // Mobile: kein Antialiasing (großer Perf-Gewinn)
-  powerPreference: isMobile ? 'low-power' : 'high-performance'
+  antialias: !isMobile           // Mobile: kein Antialiasing (großer Perf-Gewinn)
 });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(isMobile ? Math.min(devicePixelRatio, 1) : Math.min(devicePixelRatio, 2));
