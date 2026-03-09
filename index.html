@@ -408,12 +408,18 @@ function playCrashSound() {
 document.addEventListener('keydown', () => initAudio(), { once: true });
 document.addEventListener('click',   () => initAudio(), { once: true });
 
+// ---- Mobile Detection (muss vor Renderer stehen) ----
+const isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || (window.innerWidth < 768);
+
 // ---- Renderer ----
-const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gameCanvas'), antialias: true });
+const renderer = new THREE.WebGLRenderer({
+  canvas: document.getElementById('gameCanvas'),
+  antialias: !isMobile
+});
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.BasicShadowMap; // Mobile: weniger Aufwand
+renderer.setPixelRatio(isMobile ? 1 : Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = !isMobile;
+renderer.shadowMap.type = THREE.BasicShadowMap;
 
 const scene = new THREE.Scene();
 scene.fog = new THREE.FogExp2(0xaabbcc, 0.006);
@@ -432,7 +438,7 @@ window.addEventListener('resize', () => {
 const world = new CANNON.World();
 world.gravity.set(0, -9.82, 0);
 world.broadphase = new CANNON.SAPBroadphase(world);
-world.solver.iterations = 10;
+world.solver.iterations = isMobile ? 6 : 10;
 world.allowSleep = false;
 
 const matGround  = new CANNON.Material('gnd');
@@ -1822,7 +1828,7 @@ spawnPed( 7.4,-78,-92,-28);
 // ================================================================
 //  PARTICLES
 // ================================================================
-const SNOW_POOL  = 250;
+const SNOW_POOL  = isMobile ? 60 : 250;
 const snowPool   = [];
 const brushPool  = [];
 const spreadPool = [];
@@ -2246,6 +2252,8 @@ let beaconT = 0;
 let texTimer = 0;
 let progTimer = 0;
 let texDirty  = false;
+let minimapTimer = 0;
+const MINIMAP_INTERVAL = isMobile ? 0.3 : 0;
 
 function animate() {
   requestAnimationFrame(animate);
@@ -2594,9 +2602,13 @@ function animate() {
   // ---- Day/Night ----
   updateDayNight(dt);
 
-  // ---- Minimap ----
-  const mpp = onFoot && playerPed ? playerPed.position : vGroup.position;
-  drawMinimap(mpp.x, mpp.z);
+  // ---- Minimap (throttled on mobile) ----
+  minimapTimer += dt;
+  if (minimapTimer >= MINIMAP_INTERVAL) {
+    minimapTimer = 0;
+    const mpp = onFoot && playerPed ? playerPed.position : vGroup.position;
+    drawMinimap(mpp.x, mpp.z);
+  }
 
   renderer.render(scene, camera);
 }
@@ -2677,7 +2689,7 @@ document.getElementById('settings-close').addEventListener('click', () => {
 // ================================================================
 //  MOBILE TOUCH CONTROLS
 // ================================================================
-const isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || (window.innerWidth < 768);
+// isMobile bereits oben vor dem Renderer definiert
 
 // Touch-init nach DOM-Ready (HTML kommt nach Script)
 window.addEventListener('load', () => {
