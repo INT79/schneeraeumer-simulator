@@ -1445,42 +1445,178 @@ addDriveway(-11,-68,3,5); addDriveway(11,-55,3,5);
 addDriveway(-11,  8,3,5); addDriveway(11, 22,3,5);
 
 // ================================================================
-//  PARKENDE AUTOS
+//  FAHRZEUGMODELL-BUILDER (5 Typen)
+//  0=Limousine  1=Kombi  2=SUV  3=Kleinwagen  4=Transporter
 // ================================================================
 const pCarColors = [0xc0c0c0, 0x888888, 0x222222, 0xcc2222, 0x2244bb, 0x3d7a3d];
+const CAR_TYPE_COUNT = 5;
 
-function addParkedCar(px, pz, ry, ci) {
+// Gemeinsames Glasmaterial für alle Fahrzeugscheiben
+const _carGlassMat = new THREE.MeshLambertMaterial({
+  color: 0x88aacc, transparent: true, opacity: 0.52
+});
+
+// Dunklere Farbvariante für Spiegel / Akkzente
+function _darkShade(col) {
+  const r = (col >> 16) & 0xff, gv = (col >> 8) & 0xff, b = col & 0xff;
+  return (Math.floor(r * 0.50) << 16) | (Math.floor(gv * 0.50) << 8) | Math.floor(b * 0.50);
+}
+
+// Glasscheibe mit optionalem x-Rotation (für Windschutzscheiben-Neigung)
+function _addGlass(g, w, h, d, px, py, pz, rx) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), _carGlassMat);
+  m.position.set(px, py, pz);
+  if (rx) m.rotation.x = rx;
+  g.add(m);
+}
+
+/**
+ * Baut ein Fahrzeugmodell in Gruppe g.
+ * type: 0=Limousine, 1=Kombi, 2=SUV, 3=Kleinwagen, 4=Transporter
+ */
+function buildCarMesh(g, col, type) {
+  const BUMPER = 0x2a2a2a;
+  const GRILL  = 0x131313;
+  const dark   = _darkShade(col);
+  // Radradius je Typ
+  const WR = [0.30, 0.31, 0.37, 0.28, 0.34][type];
+
+  // ----------------------------------------------------------------
+  //  Typ 4: Transporter / Van (kastenförmig, hohe Kabine)
+  // ----------------------------------------------------------------
+  if (type === 4) {
+    const bw = 2.02, bd = 5.0, wr = WR, bodyH = 1.90;
+    const by = wr + bodyH / 2;
+    // Einheitlich hohe Karosserie (Body + Kabine verschmelzen)
+    g.add(box(bw, bodyH, bd, col, 0, by, 0));
+    // Frontscheibe (nahezu vertikal)
+    _addGlass(g, bw - 0.22, 0.72, 0.06, 0, wr + bodyH - 0.42, bd / 2 + 0.03, 0.08);
+    // Seitenfenster (nur Fahrerbereich vorne)
+    const swz4 = bd / 2 - 0.65;
+    _addGlass(g, 0.05, 0.62, 1.08, -bw / 2 - 0.01, wr + bodyH - 0.44, swz4, 0);
+    _addGlass(g, 0.05, 0.62, 1.08,  bw / 2 + 0.01, wr + bodyH - 0.44, swz4, 0);
+    // Keine Heckscheibe (Ladebereich)
+    // Stoßstangen
+    g.add(box(bw + 0.10, 0.22, 0.16, BUMPER, 0, wr + 0.15, bd / 2 + 0.08));
+    g.add(box(bw + 0.10, 0.20, 0.15, BUMPER, 0, wr + 0.13, -bd / 2 - 0.075));
+    // Kühlergrill
+    g.add(box(bw * 0.55, 0.22, 0.08, GRILL, 0, wr + 0.28, bd / 2 + 0.04));
+    // Seitenspiegel (groß, weit oben)
+    const mz4 = bd / 2 - 0.30, my4 = wr + bodyH - 0.58;
+    g.add(box(0.15, 0.11, 0.20, dark, -bw / 2 - 0.075, my4, mz4));
+    g.add(box(0.15, 0.11, 0.20, dark,  bw / 2 + 0.075, my4, mz4));
+    // Türlinie (Trennung Fahrerhaus / Ladebereich)
+    g.add(box(0.04, bodyH * 0.80, bd * 0.01, dark, -bw / 2 - 0.01, by, bd * 0.08));
+    g.add(box(0.04, bodyH * 0.80, bd * 0.01, dark,  bw / 2 + 0.01, by, bd * 0.08));
+    // Radkästen
+    const wz14 = bd * 0.30, wz24 = -bd * 0.30;
+    [wz14, wz24].forEach(wz => g.add(box(bw + 0.06, 0.07, 1.02, BUMPER, 0, wr + 0.04, wz)));
+    // Räder (inkl. Radkappe)
+    const wsx4 = bw / 2 + 0.06;
+    [[-wsx4, wr, wz14], [wsx4, wr, wz14], [-wsx4, wr, wz24], [wsx4, wr, wz24]].forEach(([x, y, z]) => {
+      g.add(cyl(wr, wr, 0.25, 10, 0x222222, x, y, z, 0, Math.PI / 2));
+      g.add(cyl(wr * 0.55, wr * 0.55, 0.26, 8, 0x777777, x, y, z, 0, Math.PI / 2));
+    });
+    // Schnee auf Dach
+    g.add(box(bw - 0.18, 0.13, bd - 0.22, COL_SNOW, 0, wr + bodyH + 0.065, 0));
+    return;
+  }
+
+  // ----------------------------------------------------------------
+  //  Typen 0–3: klassische PKW-Bauweise (Unterbau + Kabine)
+  // ----------------------------------------------------------------
+  // [bw, bh, bd, cw, ch, cd, czOff, wsAngle, rwAngle, roofRack]
+  const CFG = [
+    [1.80, 0.55, 4.50, 1.60, 0.48, 2.00,  0.22, 0.28, -0.38, false], // 0 Limousine (flach, lang)
+    [1.80, 0.55, 4.60, 1.60, 0.62, 2.65, -0.10, 0.22, -0.12, true ], // 1 Kombi (längeres Heck)
+    [1.92, 0.72, 4.40, 1.74, 0.72, 2.30,  0.08, 0.20, -0.22, true ], // 2 SUV (höher, breiter)
+    [1.70, 0.52, 3.60, 1.55, 0.65, 1.85,  0.10, 0.30, -0.36, false], // 3 Kleinwagen (kurz, kompakt)
+  ];
+  const [bw, bh, bd, cw, ch, cd, czOff, wsA, rwA, roofRack] = CFG[type];
+  const wr = WR;
+  const by  = wr + bh / 2;       // Unterbau-Mitte Y
+  const cty = wr + bh + ch / 2;  // Kabinen-Mitte Y
+
+  // Unterbau / Karosserie
+  g.add(box(bw, bh, bd, col, 0, by, 0));
+
+  // Stoßstangen (vorne + hinten)
+  g.add(box(bw + 0.08, 0.17, 0.13, BUMPER, 0, wr + 0.12,  bd / 2 + 0.065));
+  g.add(box(bw + 0.08, 0.15, 0.13, BUMPER, 0, wr + 0.10, -bd / 2 - 0.065));
+
+  // Kühlergrill vorne
+  g.add(box(bw * 0.58, bh * 0.36, 0.07, GRILL, 0, wr + bh * 0.28, bd / 2 + 0.03));
+
+  // Kabine
+  g.add(box(cw, ch, cd, col, 0, cty, czOff));
+
+  // Frontscheibe
+  _addGlass(g, cw - 0.08, ch - 0.06, 0.06, 0, cty + 0.02, czOff + cd / 2 + 0.03, wsA);
+  // Heckscheibe
+  _addGlass(g, cw - 0.10, ch - 0.10, 0.06, 0, cty + 0.02, czOff - cd / 2 - 0.03, rwA);
+  // Seitenscheiben (links + rechts)
+  const swh = ch - 0.14, swd = cd * 0.70;
+  _addGlass(g, 0.05, swh, swd, -cw / 2 - 0.01, cty, czOff);
+  _addGlass(g, 0.05, swh, swd,  cw / 2 + 0.01, cty, czOff);
+
+  // Seitenspiegel (kleine Boxen vorne an der Kabine)
+  const mz = czOff + cd / 2 - 0.22;
+  g.add(box(0.10, 0.07, 0.14, dark, -bw / 2 - 0.055, cty - 0.14, mz));
+  g.add(box(0.10, 0.07, 0.14, dark,  bw / 2 + 0.055, cty - 0.14, mz));
+
+  // Türlinien (B-Säulen-Trennung, dünne dunkle Streifen)
+  const pillarZ = czOff + (type === 1 ? 0.05 : 0.0);
+  g.add(box(0.04, ch * 0.85, bd * 0.012, dark, -cw / 2 - 0.01, cty, pillarZ));
+  g.add(box(0.04, ch * 0.85, bd * 0.012, dark,  cw / 2 + 0.01, cty, pillarZ));
+
+  // Radkästen (leicht dunklere Streifen über den Rädern)
+  const wz1 = bd * 0.295, wz2 = -bd * 0.295;
+  [wz1, wz2].forEach(wz => g.add(box(bw + 0.04, 0.06, 0.85, BUMPER, 0, wr + 0.03, wz)));
+
+  // Räder (Reifen + Radkappe)
+  const wsx = bw / 2 + 0.04;
+  [[-wsx, wr, wz1], [wsx, wr, wz1], [-wsx, wr, wz2], [wsx, wr, wz2]].forEach(([x, y, z]) => {
+    g.add(cyl(wr, wr, 0.22, 10, 0x222222, x, y, z, 0, Math.PI / 2));
+    g.add(cyl(wr * 0.58, wr * 0.58, 0.23, 8, 0x777777, x, y, z, 0, Math.PI / 2));
+  });
+
+  // Dachreling (Kombi + SUV)
+  if (roofRack) {
+    const rry = cty + ch / 2 + 0.04;
+    const rrw = cw - 0.26;
+    // Querstreben
+    g.add(box(rrw, 0.05, 0.08, 0x888888, 0, rry, czOff + cd * 0.33));
+    g.add(box(rrw, 0.05, 0.08, 0x888888, 0, rry, czOff - cd * 0.33));
+    // Längsschienen
+    g.add(box(0.05, 0.06, cd * 0.73, 0x888888, -rrw / 2, rry, czOff));
+    g.add(box(0.05, 0.06, cd * 0.73, 0x888888,  rrw / 2, rry, czOff));
+  }
+
+  // Schnee auf Dach
+  g.add(box(cw - 0.10, 0.11, cd - 0.10, COL_SNOW, 0, cty + ch / 2 + 0.055, czOff));
+}
+
+// ================================================================
+//  PARKENDE AUTOS
+// ================================================================
+
+function addParkedCar(px, pz, ry, ci, type) {
+  if (type === undefined) type = Math.floor(Math.random() * CAR_TYPE_COUNT);
   const col = pCarColors[ci % pCarColors.length];
   const g   = new THREE.Group();
-
-  // Lower body
-  const lb = box(1.7, 0.65, 3.9, col, 0, 0.65, 0);
-  g.add(lb);
-  // Cabin
-  const cab = box(1.5, 0.65, 2.1, col, 0, 1.35, -0.3);
-  g.add(cab);
-  // Windshield
-  const wsM = new THREE.MeshLambertMaterial({ color: 0x88aacc, transparent: true, opacity: 0.55 });
-  const wsG = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.48, 0.05), wsM);
-  wsG.position.set(0, 1.4, 0.76); wsG.rotation.x = 0.25;
-  g.add(wsG);
-  // Wheels
-  [[-0.88, 0.3, 1.25],[0.88, 0.3, 1.25],[-0.88, 0.3,-1.25],[0.88, 0.3,-1.25]].forEach(([x,y,z]) => {
-    const wh = cyl(0.27, 0.27, 0.2, 12, 0x222222, x, y, z, 0, Math.PI/2);
-    g.add(wh);
-  });
-  // Snow on roof
-  const snw = box(1.4, 0.1, 2.0, COL_SNOW, 0, 1.72, -0.3);
-  g.add(snw);
-
+  buildCarMesh(g, col, type);
   g.position.set(px, 0, pz);
   g.rotation.y = ry;
   scene.add(g);
 
+  // Physik-Kollider (konservativ je Typ)
+  const HW = [0.90, 0.90, 0.96, 0.85, 1.01][type];
+  const HH = [0.65, 0.70, 0.80, 0.62, 1.00][type];
+  const HD = [2.25, 2.30, 2.20, 1.80, 2.50][type];
   const cb = new CANNON.Body({ mass: 0 });
-  cb.addShape(new CANNON.Box(new CANNON.Vec3(0.85, 0.65, 1.95)));
-  cb.position.set(px, 0.65, pz);
-  cb.quaternion.setFromAxisAngle(new CANNON.Vec3(0,1,0), ry);
+  cb.addShape(new CANNON.Box(new CANNON.Vec3(HW, HH, HD)));
+  cb.position.set(px, HH, pz);
+  cb.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), ry);
   world.addBody(cb);
 }
 
@@ -1742,6 +1878,10 @@ spawnNPC(-2, -15, 1,  0.048);
 spawnNPC( 2,  30, -1, 0.052);
 spawnNPC( 2,  72, -1, 0.045);
 spawnNPC(-2,  5,  1,  0.060);
+spawnNPC(-2, -40, 1,  0.058);
+spawnNPC( 2,  55, -1, 0.047);
+spawnNPC(-2,  45, 1,  0.053);
+spawnNPC( 2, -80, -1, 0.050);
 
 // ================================================================
 //  TRAFFIC CARS (fahrende Autos auf allen 6 Straßen)
@@ -1751,30 +1891,28 @@ function randomColor() {
 }
 
 function spawnCar(startX, startZ, dir, lane, speed, color) {
+  // Zufälliger Fahrzeugtyp für jeden Verkehrsteilnehmer
+  const type = Math.floor(Math.random() * CAR_TYPE_COUNT);
   const g = new THREE.Group();
-  // Karosserie
-  g.add(box(2.0, 0.7, 4.2, color,                   0, 0.55, 0));
-  g.add(box(1.7, 0.55, 2.2, Math.floor(color * 0.85), 0, 1.1,  0.2));
-  // Räder
-  [[-0.95,-0.02,1.3],[0.95,-0.02,1.3],[-0.95,-0.02,-1.3],[0.95,-0.02,-1.3]].forEach(([wx,wy,wz]) => {
-    g.add(cyl(0.32, 0.32, 0.22, 8, 0x222222, wx, wy, wz));
-  });
-  // Scheinwerfer
-  g.add(box(0.3, 0.18, 0.08, 0xffffcc, -0.65, 0.6,  2.1));
-  g.add(box(0.3, 0.18, 0.08, 0xffffcc,  0.65, 0.6,  2.1));
+  buildCarMesh(g, color, type);
+  // Scheinwerfer (immer vorne, unabhängig vom Typ)
+  const fz = [4.50, 4.60, 4.40, 3.60, 5.00][type] / 2 + 0.08;
+  g.add(box(0.28, 0.16, 0.07, 0xffffcc, -0.60, [0.57, 0.57, 0.65, 0.54, 0.55][type],  fz));
+  g.add(box(0.28, 0.16, 0.07, 0xffffcc,  0.60, [0.57, 0.57, 0.65, 0.54, 0.55][type],  fz));
   // Rücklichter
-  g.add(box(0.3, 0.18, 0.08, 0xff2200, -0.65, 0.6, -2.1));
-  g.add(box(0.3, 0.18, 0.08, 0xff2200,  0.65, 0.6, -2.1));
-  // Positionieren
+  g.add(box(0.28, 0.16, 0.07, 0xff2200, -0.60, [0.57, 0.57, 0.65, 0.54, 0.55][type], -fz));
+  g.add(box(0.28, 0.16, 0.07, 0xff2200,  0.60, [0.57, 0.57, 0.65, 0.54, 0.55][type], -fz));
+  // Ausrichtung nach Fahrtrichtung
   g.position.set(startX, 0, startZ);
-  if (dir === 'OW')            g.rotation.y =  Math.PI / 2;
+  if (dir === 'OW')             g.rotation.y =  Math.PI / 2;
   if (lane < 0 && dir === 'NS') g.rotation.y =  Math.PI;
   if (lane < 0 && dir === 'OW') g.rotation.y = -Math.PI / 2;
   scene.add(g);
-  // Physik-Body
-  const shape = new CANNON.Box(new CANNON.Vec3(1.0, 0.7, 2.1));
+  // Physik-Body (angepasst je Typ)
+  const HH = [0.65, 0.70, 0.80, 0.62, 1.00][type];
+  const shape = new CANNON.Box(new CANNON.Vec3(1.0, HH, 2.1));
   const body  = new CANNON.Body({ mass: 800, shape });
-  body.position.set(startX, 0.7, startZ);
+  body.position.set(startX, HH, startZ);
   body.linearDamping  = 0.99;
   body.angularDamping = 1.0;
   world.addBody(body);
@@ -1783,29 +1921,37 @@ function spawnCar(startX, startZ, dir, lane, speed, color) {
 
 const trafficCars = [];
 
-// Mobile-Optimiert: max 16 Autos gesamt
-// N-S Hauptstraße (x=0): 2 pro Richtung
-for (let i = 0; i < 2; i++) {
+// Erhöhte Verkehrsdichte
+// N-S Hauptstraße (x=0): 3 pro Richtung
+for (let i = 0; i < 3; i++) {
   // Rechtsverkehr: nordwärts (+Z, +1) auf östlicher Seite (+X), südwärts (-Z, -1) auf westlicher (-X)
-  trafficCars.push(spawnCar( 3.5, -100 + i*120, 'NS', +1, 2.5 + Math.random(), randomColor()));
-  trafficCars.push(spawnCar(-3.5,  100 - i*120, 'NS', -1, 2.0 + Math.random(), randomColor()));
+  trafficCars.push(spawnCar( 3.5, -100 + i*80, 'NS', +1, 2.5 + Math.random(), randomColor()));
+  trafficCars.push(spawnCar(-3.5,  100 - i*80, 'NS', -1, 2.0 + Math.random(), randomColor()));
 }
-// N-S Nebenstraßen: 1 pro Richtung
+// N-S Nebenstraßen: 2 pro Richtung
 // Nebenstraßen NS: nordwärts (+1) auf östlicher Seite, südwärts (-1) auf westlicher Seite
 trafficCars.push(spawnCar(-80+2.2, -80, 'NS', +1, 1.8, randomColor())); // x=-77.8 (Ostseite von x=-80)
+trafficCars.push(spawnCar(-80+2.2,  10, 'NS', +1, 1.6, randomColor())); // 2. Auto nordwärts
 trafficCars.push(spawnCar(-80-2.2,  80, 'NS', -1, 1.5, randomColor())); // x=-82.2 (Westseite von x=-80)
+trafficCars.push(spawnCar(-80-2.2, -10, 'NS', -1, 1.7, randomColor())); // 2. Auto südwärts
 trafficCars.push(spawnCar( 80+2.2, -80, 'NS', +1, 1.8, randomColor())); // x=+82.2 (Ostseite von x=+80)
+trafficCars.push(spawnCar( 80+2.2,  20, 'NS', +1, 1.6, randomColor())); // 2. Auto nordwärts
 trafficCars.push(spawnCar( 80-2.2,  80, 'NS', -1, 1.5, randomColor())); // x=+77.8 (Westseite von x=+80)
-// O-W Hauptstraße (z=0): 2 pro Richtung
-for (let i = 0; i < 2; i++) {
-  trafficCars.push(spawnCar(-100 + i*120, -3.5, 'OW', +1, 2.5 + Math.random(), randomColor()));
-  trafficCars.push(spawnCar( 100 - i*120,  3.5, 'OW', -1, 2.0 + Math.random(), randomColor()));
+trafficCars.push(spawnCar( 80-2.2, -20, 'NS', -1, 1.7, randomColor())); // 2. Auto südwärts
+// O-W Hauptstraße (z=0): 3 pro Richtung
+for (let i = 0; i < 3; i++) {
+  trafficCars.push(spawnCar(-100 + i*80, -3.5, 'OW', +1, 2.5 + Math.random(), randomColor()));
+  trafficCars.push(spawnCar( 100 - i*80,  3.5, 'OW', -1, 2.0 + Math.random(), randomColor()));
 }
-// O-W Nebenstraßen: 1 pro Richtung
+// O-W Nebenstraßen: 2 pro Richtung
 trafficCars.push(spawnCar(-80, -80-2.2, 'OW', +1, 1.8, randomColor()));
+trafficCars.push(spawnCar( 10, -80-2.2, 'OW', +1, 1.6, randomColor())); // 2. Auto ostwärts
 trafficCars.push(spawnCar( 80, -80+2.2, 'OW', -1, 1.5, randomColor()));
+trafficCars.push(spawnCar(-10, -80+2.2, 'OW', -1, 1.7, randomColor())); // 2. Auto westwärts
 trafficCars.push(spawnCar(-80,  80-2.2, 'OW', +1, 1.8, randomColor()));
+trafficCars.push(spawnCar( 10,  80-2.2, 'OW', +1, 1.6, randomColor())); // 2. Auto ostwärts
 trafficCars.push(spawnCar( 80,  80+2.2, 'OW', -1, 1.5, randomColor()));
+trafficCars.push(spawnCar(-10,  80+2.2, 'OW', -1, 1.7, randomColor())); // 2. Auto westwärts
 
 // ================================================================
 //  PEDESTRIANS
@@ -1824,6 +1970,8 @@ spawnPed(-7.4,-50,-90,-10);
 spawnPed( 7.4, 18,  0, 70);
 spawnPed(-7.4, 60, 20, 95);
 spawnPed( 7.4,-78,-92,-28);
+spawnPed(-7.4, 30,-10, 80);
+spawnPed( 7.4,-30,-85, 15);
 
 // ================================================================
 //  PARTICLES
