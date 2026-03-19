@@ -446,6 +446,18 @@ const matVehicle = new CANNON.Material('veh');
 const contactGV  = new CANNON.ContactMaterial(matGround, matVehicle, { friction: 0.6, restitution: 0.02 });
 world.addContactMaterial(contactGV);
 
+// ---- Mülltonnen-Physik-Material ----
+const matBin = new CANNON.Material('bin');
+// Tonne ↔ Boden: gute Haftreibung, leichtes Abprallen
+const contactBinGnd = new CANNON.ContactMaterial(matGround, matBin, { friction: 0.55, restitution: 0.08 });
+// Tonne ↔ Fahrzeug: gleitfreundlich bei Stoß
+const contactBinVeh = new CANNON.ContactMaterial(matVehicle, matBin, { friction: 0.25, restitution: 0.15 });
+world.addContactMaterial(contactBinGnd);
+world.addContactMaterial(contactBinVeh);
+
+// Array aller dynamischen Mülltonnen für Mesh-Sync
+const trashBins = [];
+
 // ---- Snow Grid ----
 const GRID  = 120;
 const MSIZE = 300;
@@ -1411,16 +1423,25 @@ addFenceLine(-FA, FA, -FA, FB, Math.random() < 0.3);
 
     scene.add(g);
 
-    // Physik-Kollider (statisch, mass: 0)
-    const phBody = new CANNON.Body({ mass: 0 });
+    // Physik-Kollider (dynamisch, mass: 30 kg)
+    // Trägheitsmoment für eine Box: I = m/12 * (h²+d²) etc. — Cannon berechnet das automatisch aus der Shape
+    const phBody = new CANNON.Body({
+      mass: 30,
+      material: matBin,
+      linearDamping:  0.45,   // Abbremsen ohne ewig zu rutschen
+      angularDamping: 0.55    // Drehen abbremsen, aber Umkippen erlauben
+    });
     phBody.addShape(new CANNON.Box(new CANNON.Vec3(
-      (bw + 0.04) / 2 + 0.04,
+      (bw + 0.04) / 2 + 0.02,
       (bh + 0.07) / 2,
-      (bd + 0.05) / 2 + 0.04
+      (bd + 0.05) / 2 + 0.02
     )));
     phBody.position.set(px, (bh + 0.07) / 2, pz);
     phBody.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), ry);
     world.addBody(phBody);
+
+    // Für Mesh-Sync in der Render-Loop speichern
+    trashBins.push({ mesh: g, body: phBody });
   }
 
   // Platziere Mülltonnen entlang einer Zaunlinie
@@ -2759,6 +2780,12 @@ function animate() {
     car.body.angularVelocity.set(0, 0, 0);
     car.mesh.position.copy(car.body.position);
     car.mesh.position.y = 0;
+  });
+
+  // ---- Mülltonnen-Physik-Sync ----
+  trashBins.forEach(bin => {
+    bin.mesh.position.copy(bin.body.position);
+    bin.mesh.quaternion.copy(bin.body.quaternion);
   });
 
   // ---- Traffic Collision Detection (Proximity-Check) ----
