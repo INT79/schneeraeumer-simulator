@@ -72,6 +72,17 @@ canvas#gameCanvas { display: block; position: fixed; top: 0; left: 0; }
   border: 1px solid rgba(255,255,255,0.12);
 }
 
+/* GTA 3 Vignette */
+#vignette {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  pointer-events: none; z-index: 5;
+  background: radial-gradient(ellipse at center,
+    transparent 55%,
+    rgba(0,0,0,0.18) 75%,
+    rgba(0,0,0,0.42) 100%
+  );
+}
+
 /* Weather panel */
 #weather-panel {
   position: fixed; top: 50%; left: 50%;
@@ -208,6 +219,7 @@ canvas#gameCanvas { display: block; position: fixed; top: 0; left: 0; }
 <body>
 
 <canvas id="gameCanvas"></canvas>
+<div id="vignette"></div>
 
 <div id="hud">
   <div id="title">❄ SCHNEERÄUMER – IM NORDEN</div>
@@ -420,9 +432,14 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(isMobile ? 1 : Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = !isMobile;
 renderer.shadowMap.type = THREE.BasicShadowMap;
+// GTA 3: leicht entsättigte, kontrastreiche Darstellung
+renderer.toneMapping = THREE.ReinhardToneMapping;
+renderer.toneMappingExposure = 0.82;
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0xaabbcc, 0.006);
+// GTA 3: Linearer Fog — dichter Nebel ab 70m, komplett bei 140m
+// Macht die Welt "endlich" und gibt den typischen GTA-3-Look
+scene.fog = new THREE.Fog(0x8899aa, 70, 145);
 
 const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 600);
 camera.position.set(0, 8, -32); // direkt hinter Fahrzeug (z=-20, offset -12)
@@ -489,7 +506,8 @@ function rebuildSnowTex() {
     for (let j = 0; j < GRID; j++) {
       const v = snowGrid[i * GRID + j];
       if (v > 0.02) {
-        snowCtx.fillStyle = `rgba(232,238,244,${Math.min(1, v).toFixed(2)})`;
+        // GTA 3: Schnee leicht bläulich-grau, nicht reinweiß
+        snowCtx.fillStyle = `rgba(220,228,238,${Math.min(1, v).toFixed(2)})`;
         snowCtx.fillRect(Math.floor(i * cw), Math.floor(j * cw), Math.ceil(cw)+1, Math.ceil(cw)+1);
       }
     }
@@ -517,7 +535,7 @@ rebuildGritTex();
 
 // ---- Ground (Asphalt-Basis) ----
 const groundGeo = new THREE.PlaneGeometry(MSIZE, MSIZE);
-const groundMat = new THREE.MeshLambertMaterial({ color: 0x888888 });
+const groundMat = new THREE.MeshLambertMaterial({ color: 0x707278 }); // GTA 3: Asphalt-Boden bläulich-grau
 const groundMesh = new THREE.Mesh(groundGeo, groundMat);
 groundMesh.rotation.x = -Math.PI / 2;
 groundMesh.receiveShadow = true;
@@ -556,12 +574,18 @@ gBody.addShape(new CANNON.Plane());
 gBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1,0,0), -Math.PI/2);
 world.addBody(gBody);
 
-// ---- Lighting ----
-const ambLight = new THREE.AmbientLight(0xffffff, 0.55);
+// ---- Lighting — GTA 3 Style ----
+// Ambient: bläulich-grau (kein reines Weiß), bewölktes Himmelslicht
+const ambLight = new THREE.AmbientLight(0x8899bb, 0.45);
 scene.add(ambLight);
 
-const sunLight = new THREE.DirectionalLight(0xfff4e0, 1.0);
-sunLight.position.set(60, 90, 40);
+// Sonne: warm-orange wie tiefer Nachmittag, flacher Winkel
+const sunLight = new THREE.DirectionalLight(0xffcc88, 0.90);
+sunLight.position.set(80, 55, 30); // flacherer Winkel = GTA-3-typische Nachmittagssonne
+
+// HemisphereLight: Himmel (blau-grau) ↔ Boden (warm-braun) — gibt den GTA-3-Horizont-Look
+const hemLight = new THREE.HemisphereLight(0x9aaabb, 0x554433, 0.28);
+scene.add(hemLight);
 sunLight.castShadow = true;
 sunLight.shadow.mapSize.set(512, 512); // Mobile-Optimierung
 sunLight.shadow.camera.near   = 1;
@@ -599,11 +623,12 @@ function cyl(rt, rb, h, seg, color, px, py, pz, rx = 0, rz = 0) {
 // ================================================================
 //  MAP — STRASSEN, GEHWEGE, MARKIERUNGEN
 // ================================================================
-const COL_ROAD    = 0x3e3e42;   // Berliner Asphalt dunkelanthrazit
-const COL_SIDE    = 0xb0b0b0;
-const COL_SNOW    = 0xe8eef4;
-const COL_GRASS   = 0x5a5040;   // Berliner Grünstreifen: Erde/Wintergras
-const COL_GRASS2  = 0x4a6030;   // Sommergrün für Hintergrund
+// GTA 3: Gedämpfte, urbane Farben
+const COL_ROAD    = 0x3a3c42;   // Asphalt: leicht bläulich-grau
+const COL_SIDE    = 0xa8a8a8;   // gedämpftes Hellgrau
+const COL_SNOW    = 0xdce4ee;   // Schnee: leicht bläulich (kein reines Weiß)
+const COL_GRASS   = 0x484438;   // Grünstreifen: sehr gedecktes Winterbraun
+const COL_GRASS2  = 0x3e4828;   // Hintergrund: gedämpftes Dunkelgrün
 
 function addPlane(w, d, color, px, py, pz) {
   const m = new THREE.Mesh(
@@ -648,11 +673,12 @@ function buildStreet(cx, cz, w, len, dir) {
 }
 
 // Berliner Bürgersteig-Querschnitt (Referenzfotos Wedding/Mitte)
-const COL_PARK    = 0x7a7a6e; // Parkstreifen (abgenutzter Asphalt)
-const COL_PFLAST  = 0x8A8580; // Kleinsteinpflaster Granit-Mix (Referenz Wedding/Mitte)
-const COL_GEHWEG  = 0xB0AAA2; // Gehweg Betonplatten beigegrau (Berliner Standard)
-const COL_RADWEG  = 0x8B6E5C; // Knochensteine rötlich-braun (Radweg Berlin)
-const COL_GRUEN   = 0x6B5E48; // Grünstreifen Erde/Wintergras
+// GTA 3: Bürgersteig-Farben — gedämpft, weniger satt
+const COL_PARK    = 0x6e6e64; // Parkstreifen (sehr abgenutzter Asphalt)
+const COL_PFLAST  = 0x807c78; // Kleinsteinpflaster — gedämpfter Granit
+const COL_GEHWEG  = 0xa0988e; // Gehweg Beton — beige-grau, weniger hell
+const COL_RADWEG  = 0x7a6050; // Radweg Knochensteine — dunkler
+const COL_GRUEN   = 0x585040; // Grünstreifen — sehr gedeckt
 
 // Betonplatten-Textur für Gehweg (Kanvas-Texture mit Fugenraster)
 function createConcreteTexture() {
@@ -823,7 +849,8 @@ function addZebra(cx, cz, dir) {
   const gap     = 0.55;   // Lücke
   const count   = 7;      // Anzahl Streifen
   const len     = 4.5;    // Breite der Furt
-  const mat = new THREE.MeshLambertMaterial({ color: 0xf5f2eb, emissive: new THREE.Color(0x111111), emissiveIntensity: 0.15, opacity: 1.0, transparent: false });
+  // GTA 3: Zebrastreifen — leicht verwittert, nicht reinweiß
+  const mat = new THREE.MeshLambertMaterial({ color: 0xd8d4c4, opacity: 1.0, transparent: false });
   for (let i = 0; i < count; i++) {
     const off = (i - (count-1)/2) * (stripeW + gap);
     const m = new THREE.Mesh(
@@ -932,7 +959,8 @@ for (let t = -130; t <= 130; t += 11) {                                         
 // ================================================================
 //  BUILDINGS
 // ================================================================
-const bColors = [0xf4f0e4, 0xd3d3d3, 0xf0e4b8, 0xce8060, 0xcc5555];
+// GTA 3: Gebäudefarben — gedämpft, entsättigt, urban-grau
+const bColors = [0xbcb8ad, 0xacacac, 0xbcb09a, 0x9a6248, 0x7e3535];
 
 const lanterns = [];
 
@@ -1608,7 +1636,8 @@ addDriveway(-11,  8,3,5); addDriveway(11, 22,3,5);
 //  FAHRZEUGMODELL-BUILDER (5 Typen)
 //  0=Limousine  1=Kombi  2=SUV  3=Kleinwagen  4=Transporter
 // ================================================================
-const pCarColors = [0xc0c0c0, 0x888888, 0x222222, 0xcc2222, 0x2244bb, 0x3d7a3d];
+// GTA 3: Parkauto-Farben — gedeckt, urban, nicht zu bunt
+const pCarColors = [0xa8a8a8, 0x707070, 0x222222, 0x883322, 0x223388, 0x2e5e2e];
 const CAR_TYPE_COUNT = 5;
 
 // Gemeinsames Glasmaterial für alle Fahrzeugscheiben
@@ -2022,7 +2051,8 @@ const MAX_BRAKE   = 90;
 //  NPC CARS
 // ================================================================
 const npcs = [];
-const npcColors = [0xaa3333, 0x3355aa, 0x338833, 0xaa8833, 0x663366];
+// GTA 3: NPC-Autofarben — gedeckt, entsättigt
+const npcColors = [0x883333, 0x2d4477, 0x2d6633, 0x887733, 0x553355];
 
 function spawnNPC(px, pz, dir, spd) {
   const col = npcColors[Math.floor(Math.random()*npcColors.length)];
@@ -2046,8 +2076,9 @@ spawnNPC( 2, -80, -1, 0.050);
 // ================================================================
 //  TRAFFIC CARS (fahrende Autos auf allen 6 Straßen)
 // ================================================================
+// GTA 3: Verkehrsfarben — gedeckt, urban, nicht bunt
 function randomColor() {
-  return [0xcc2222, 0x2244cc, 0x228833, 0xccaa22, 0x888888, 0xeeeeee, 0x993399][Math.floor(Math.random()*7)];
+  return [0x882222, 0x1e3a88, 0x1e6633, 0x887722, 0x747474, 0xcccccc, 0x663377][Math.floor(Math.random()*7)];
 }
 
 function spawnCar(startX, startZ, dir, lane, speed, color) {
@@ -2201,7 +2232,8 @@ const snowPool   = [];
 const brushPool  = [];
 const spreadPool = [];
 
-const sm = new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: new THREE.Color(0xaaccff), emissiveIntensity: 0.3 });
+// GTA 3: Schneepartikel — leicht bläulich-grau, nicht reinweiß
+const sm = new THREE.MeshLambertMaterial({ color: 0xd8e2ee, emissive: new THREE.Color(0x8899bb), emissiveIntensity: 0.2 });
 const bm = new THREE.MeshLambertMaterial({ color: 0xddeeff });
 const pm = new THREE.MeshLambertMaterial({ color: 0xaa8833 });
 const sg = new THREE.SphereGeometry(0.18, 4, 4);  // Schneeflocken
@@ -2352,14 +2384,23 @@ document.getElementById('w-close').addEventListener('click', () => {
 });
 
 const weatherIcons = { sunny:'☀️', cloudy:'🌤', light:'🌨', heavy:'❄️', night:'🌙' };
-const weatherFog   = { sunny:0.002, cloudy:0.007, light:0.020, heavy:0.055, night:0.025 };
+// GTA 3 linear Fog: [near, far] — dichter Nebel macht die Welt "endlich"
+const weatherFog   = {
+  sunny:  { near: 90,  far: 180 },
+  cloudy: { near: 70,  far: 145 },
+  light:  { near: 50,  far: 110 },
+  heavy:  { near: 25,  far: 70  },
+  night:  { near: 40,  far: 95  }
+};
 const weatherSnow  = { sunny:0, cloudy:0, light:60, heavy:220, night:130 };
 const weatherRefill = { sunny:0, cloudy:0, light:0.003, heavy:0.01, night:0.007 };
 
 function applyWeather(w) {
   weather = w;
   document.getElementById('weather-icon').textContent = weatherIcons[w] || '🌤';
-  scene.fog.density   = weatherFog[w] || 0.006;
+  const fogCfg = weatherFog[w] || weatherFog.cloudy;
+  scene.fog.near = fogCfg.near;
+  scene.fog.far  = fogCfg.far;
   snowFallTarget      = weatherSnow[w]  || 0;
   snowRefill          = weatherRefill[w] || 0;
   if (w === 'night') gameTime = 22 * 3600;
@@ -2583,28 +2624,48 @@ function updateDayNight(dt) {
   const sunAngle = ((h - 6) / 12) * Math.PI;
   sunLight.position.set(Math.cos(sunAngle)*80, Math.max(0, Math.sin(sunAngle))*80, 40);
   if (daytime) {
-    sunLight.intensity = Math.max(0.1, Math.sin(sunAngle) * 0.9);
-    ambLight.intensity = 0.55;
+    // GTA 3: Sonnenlicht nie zu hell (bewölkt), Ambient bläulich-gedämpft
+    hemLight.color.setHex(0x9aaabb);        // Himmel
+    hemLight.groundColor.setHex(0x554433);  // Boden/Horizont warm
+    hemLight.intensity = 0.28;
+    sunLight.intensity = Math.max(0.08, Math.sin(sunAngle) * 0.80);
+    ambLight.intensity = 0.40;
+    ambLight.color.setHex(0x8899bb);
   } else if (dusk) {
-    sunLight.intensity = 0.3;
-    ambLight.intensity = 0.3;
+    sunLight.intensity = 0.22;
+    ambLight.intensity = 0.22;
+    ambLight.color.setHex(0xaa8866); // Dämmerung: wärmeres Ambient
+    hemLight.color.setHex(0xcc8844);
+    hemLight.groundColor.setHex(0x442211);
+    hemLight.intensity = 0.20;
   } else {
     sunLight.intensity = 0;
-    ambLight.intensity = 0.06; // Nacht: sehr dunkel
+    ambLight.intensity = 0.05; // Nacht: sehr dunkel
+    ambLight.color.setHex(0x1a2030); // Nacht: bläulich
+    hemLight.color.setHex(0x0a1020);
+    hemLight.groundColor.setHex(0x050810);
+    hemLight.intensity = 0.08;
   }
 
-  // Sky colour
+  // GTA 3 Sky — bewölkt, grau-blau, nie strahlend
   if (h < 5 || h >= 22) {
-    scene.background = new THREE.Color(0x01010a);
+    scene.background = new THREE.Color(0x010208); // Nacht: fast schwarz
+    scene.fog.color.setHex(0x010208);
   } else if (dusk) {
     const t = (h < 6) ? (h - 5) : (21 - h);
+    // GTA 3: Dämmerung — gedämpftes Orange/Braun statt leuchtendem Rot
     scene.background = new THREE.Color().lerpColors(
-      new THREE.Color(0xff8833), new THREE.Color(0x88aacc), t
+      new THREE.Color(0xcc6622), new THREE.Color(0x7a8898), t
     );
+    scene.fog.color.copy(scene.background);
   } else if (weather === 'sunny') {
-    scene.background = new THREE.Color(0x87ceeb);
+    // "Sonnig" in GTA 3 = leicht dunstiger Blau-Himmel, nicht grell
+    scene.background = new THREE.Color(0x7a9ab8);
+    scene.fog.color.setHex(0x8aabbf);
   } else {
-    scene.background = new THREE.Color(0xaabbcc);
+    // Standard: bewölkter GTA-3-Himmel — grau-blau-grün (Liberty City Look)
+    scene.background = new THREE.Color(0x7a8c9a);
+    scene.fog.color.setHex(0x8899aa);
   }
 
   const lightsOn = h < 6.5 || h > 19.5;
@@ -3015,8 +3076,8 @@ function animate() {
   renderer.render(scene, camera);
 }
 
-// Initial sky
-scene.background = new THREE.Color(0xaabbcc);
+// Initial sky — GTA 3 bewölkt grau-blau
+scene.background = new THREE.Color(0x7a8c9a);
 animate();
 
 console.log('%c✅ Schneeräum-Simulator V2 – IM NORDEN geladen!', 'color:#FFD600;font-weight:bold;font-size:14px');
