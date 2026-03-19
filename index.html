@@ -1346,6 +1346,145 @@ addFenceLine(-FB, FA, -FB, FB, false);
 addFenceLine(-FA, FA, -FA, FB, Math.random() < 0.3);
 
 // ================================================================
+//  MÜLLTONNEN auf Bürgersteigen vor den Grundstückszäunen
+// ================================================================
+;(function addTrashBins() {
+  // Farbpalette: Grau=Restmüll, Blau=Papier, Gelb=Wertstoffe, Braun=Bio
+  const BIN_COLORS = [
+    { body: 0x6e6e6e, lid: 0x444444 }, // Grau – Restmüll
+    { body: 0x1a4a9a, lid: 0x0d2d5e }, // Blau – Papier
+    { body: 0xd4b800, lid: 0x9a8500 }, // Gelb – Wertstoffe
+    { body: 0x7b3a0e, lid: 0x4f2508 }, // Braun – Bio
+  ];
+  // Deterministisch-zufällige Verteilung (kein Math.random-Seed-Abhängigkeit)
+  const COLOR_SEQ = [0,1,2,3,0,0,2,1,3,0,2,3,1,0,2,1,3,0,1,2,3,0,1,3,2,0,1,2];
+  let _ci = 0;
+  function nextColor() { return BIN_COLORS[COLOR_SEQ[_ci++ % COLOR_SEQ.length]]; }
+
+  function addSingleBin(px, pz, ry) {
+    const col = nextColor();
+    const bw = 0.55, bh = 1.05, bd = 0.68;
+
+    const g = new THREE.Group();
+    g.position.set(px, 0, pz);
+    g.rotation.y = ry;
+
+    // Hauptkörper
+    const bodyMesh = new THREE.Mesh(
+      new THREE.BoxGeometry(bw, bh, bd),
+      new THREE.MeshLambertMaterial({ color: col.body })
+    );
+    bodyMesh.position.set(0, bh / 2, 0);
+    bodyMesh.castShadow = true;
+    g.add(bodyMesh);
+
+    // Deckel (etwas breiter, dunklere Farbe)
+    const lidMesh = new THREE.Mesh(
+      new THREE.BoxGeometry(bw + 0.04, 0.07, bd + 0.05),
+      new THREE.MeshLambertMaterial({ color: col.lid })
+    );
+    lidMesh.position.set(0, bh + 0.035, 0);
+    lidMesh.castShadow = true;
+    g.add(lidMesh);
+
+    // Räder – 2 Zylinder unten hinten (Achse entlang X)
+    const wGeo = new THREE.CylinderGeometry(0.072, 0.072, 0.09, 8);
+    const wMat = new THREE.MeshLambertMaterial({ color: 0x222222 });
+    for (const sx of [-0.20, +0.20]) {
+      const wm = new THREE.Mesh(wGeo, wMat);
+      wm.position.set(sx, 0.072, bd * 0.40);
+      wm.rotation.z = Math.PI / 2;
+      g.add(wm);
+    }
+
+    // Griff (U-Bügel oben hinten)
+    const hMat = new THREE.MeshLambertMaterial({ color: 0x333333 });
+    const hLeft  = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.14, 0.04), hMat);
+    hLeft.position.set(-0.14, bh + 0.07, -bd * 0.34);
+    g.add(hLeft);
+    const hRight = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.14, 0.04), hMat);
+    hRight.position.set(+0.14, bh + 0.07, -bd * 0.34);
+    g.add(hRight);
+    const hBar   = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.04, 0.04), hMat);
+    hBar.position.set(0, bh + 0.135, -bd * 0.34);
+    g.add(hBar);
+
+    scene.add(g);
+
+    // Physik-Kollider (statisch, mass: 0)
+    const phBody = new CANNON.Body({ mass: 0 });
+    phBody.addShape(new CANNON.Box(new CANNON.Vec3(
+      (bw + 0.04) / 2 + 0.04,
+      (bh + 0.07) / 2,
+      (bd + 0.05) / 2 + 0.04
+    )));
+    phBody.position.set(px, (bh + 0.07) / 2, pz);
+    phBody.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), ry);
+    world.addBody(phBody);
+  }
+
+  // Platziere Mülltonnen entlang einer Zaunlinie
+  // ox/oz: Offset-Richtung (Bürgersteig-Seite, weg vom Grundstück)
+  function placeBinsAlongFence(ax1, az1, ax2, az2, ox, oz) {
+    const dx = ax2 - ax1, dz = az2 - az1;
+    const len = Math.hypot(dx, dz);
+    if (len < 6) return;
+
+    // Grobe Ausrichtung zur Straße hin (mit leichter Zufallsrotation)
+    const baseRy = Math.atan2(ox, oz);
+
+    // Ca. eine Tonne pro 10–13 m
+    const spacing = 10 + Math.random() * 3;
+    const count = Math.max(1, Math.floor(len / spacing));
+
+    for (let i = 0; i < count; i++) {
+      // Position entlang des Zauns (leicht versetzt, nicht exakt mittig)
+      const t = (i + 0.25 + Math.random() * 0.50) / count;
+      const fx = ax1 + dx * t;
+      const fz = az1 + dz * t;
+
+      // Offset zur Bürgersteig-Seite + kleiner Querzufalls-Versatz
+      const perp = 0.85 + Math.random() * 0.30; // 0.85–1.15 m vom Zaun
+      const jitter = (Math.random() - 0.5) * 0.35;
+      const normX = -dz / len, normZ = dx / len; // Senkrecht zur Zaunrichtung
+      const bx = fx + ox / Math.hypot(ox, oz) * perp + normX * jitter;
+      const bz = fz + oz / Math.hypot(ox, oz) * perp + normZ * jitter;
+
+      // Leicht zufällige Rotation (±15°)
+      const ry = baseRy + (Math.random() - 0.5) * 0.5;
+
+      addSingleBin(bx, bz, ry);
+    }
+  }
+
+  const BOFF = 1.0; // Nominaler Offset vom Zaun (wird in placeBinsAlongFence variiert)
+
+  // Block NE (x=FA..FB, z=FA..FB)
+  placeBinsAlongFence(FA, FA, FB, FA,  0,     -BOFF); // Südzaun → Bürgersteig bei z<FA
+  placeBinsAlongFence(FA, FB, FB, FB,  0,     +BOFF); // Nordzaun → Bürgersteig bei z>FB
+  placeBinsAlongFence(FA, FA, FA, FB, -BOFF,  0    ); // Westzaun → Bürgersteig bei x<FA
+  placeBinsAlongFence(FB, FA, FB, FB, +BOFF,  0    ); // Ostzaun  → Bürgersteig bei x>FB
+
+  // Block SE (x=FA..FB, z=-FB..-FA)
+  placeBinsAlongFence(FA, -FA, FB, -FA,  0,    +BOFF); // Nordzaun → z>-FA
+  placeBinsAlongFence(FA, -FB, FB, -FB,  0,    -BOFF); // Südzaun  → z<-FB
+  placeBinsAlongFence(FA, -FB, FA, -FA, -BOFF,  0   ); // Westzaun → x<FA
+  placeBinsAlongFence(FB, -FB, FB, -FA, +BOFF,  0   ); // Ostzaun  → x>FB
+
+  // Block SW (x=-FB..-FA, z=-FB..-FA)
+  placeBinsAlongFence(-FB, -FA, -FA, -FA,  0,    +BOFF); // Nordzaun → z>-FA
+  placeBinsAlongFence(-FB, -FB, -FA, -FB,  0,    -BOFF); // Südzaun  → z<-FB
+  placeBinsAlongFence(-FB, -FB, -FB, -FA, -BOFF,  0   ); // Westzaun → x<-FB
+  placeBinsAlongFence(-FA, -FB, -FA, -FA, +BOFF,  0   ); // Ostzaun  → x>-FA
+
+  // Block NW (x=-FB..-FA, z=FA..FB)
+  placeBinsAlongFence(-FB, FA, -FA, FA,  0,    -BOFF); // Südzaun → z<FA
+  placeBinsAlongFence(-FB, FB, -FA, FB,  0,    +BOFF); // Nordzaun → z>FB
+  placeBinsAlongFence(-FB, FA, -FB, FB, -BOFF,  0   ); // Westzaun → x<-FB
+  placeBinsAlongFence(-FA, FA, -FA, FB, +BOFF,  0   ); // Ostzaun  → x>-FA
+})();
+
+// ================================================================
 //  INSTANCED MESHES – Bäume + Zaunpfosten in je 1 Draw Call
 // ================================================================
 (function finalizeInstanced() {
