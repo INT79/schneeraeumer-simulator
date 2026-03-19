@@ -2118,13 +2118,73 @@ trafficCars.push(spawnCar(-10,  80+2.2, 'OW', -1, 1.7, randomColor())); // 2. Au
 // ================================================================
 const peds = [];
 
+// ---- Hund-Modell ----
+const DOG_COLORS = [0x8B4513, 0x111111, 0xeeeeee, 0xC8A882, 0x5C3317, 0x888888];
+
+function createDogMesh(color) {
+  const g = new THREE.Group();
+
+  // Körper (längliche Box ~0.5m lang, 0.25m hoch)
+  g.add(box(0.28, 0.24, 0.50, color, 0, 0.24, 0));
+
+  // Kopf (kleine Box vorne)
+  const headColor = color;
+  const headMesh = box(0.20, 0.18, 0.20, headColor, 0, 0.38, 0.30);
+  g.add(headMesh);
+
+  // Ohren (2 kleine Boxen leicht gekippt)
+  const earCol = (color === 0xeeeeee) ? 0xddccaa : Math.floor(color * 0.55);
+  const earL = box(0.07, 0.13, 0.05, earCol, -0.09, 0.52, 0.28);
+  earL.rotation.z = -0.35;
+  g.add(earL);
+  const earR = box(0.07, 0.13, 0.05, earCol, 0.09, 0.52, 0.28);
+  earR.rotation.z = 0.35;
+  g.add(earR);
+
+  // Beine (4 dünne Boxen)
+  g.add(box(0.07, 0.22, 0.07, color, -0.10, 0.11, 0.17));  // vorne links
+  g.add(box(0.07, 0.22, 0.07, color,  0.10, 0.11, 0.17));  // vorne rechts
+  g.add(box(0.07, 0.22, 0.07, color, -0.10, 0.11, -0.17)); // hinten links
+  g.add(box(0.07, 0.22, 0.07, color,  0.10, 0.11, -0.17)); // hinten rechts
+
+  // Schwanz (kleiner Zylinder hinten, nach oben geneigt)
+  const tail = cyl(0.035, 0.045, 0.24, 6, color, 0, 0.38, -0.31, -0.7, 0);
+  g.add(tail);
+
+  return g;
+}
+
 function spawnPed(px, pz, pz1, pz2) {
   const g = new THREE.Group();
   g.add(box(0.38, 1.0, 0.28, 0x5a3e8a, 0, 0.5, 0));
   g.add(cyl(0.18, 0.18, 0.32, 8, 0xffcc88, 0, 1.18, 0));
   g.position.set(px, 0, pz);
   scene.add(g);
-  peds.push({ mesh: g, dir: 1, spd: 0.015 + Math.random()*0.01, z1: pz1, z2: pz2 });
+
+  // 35% Chance: Passant hat einen Hund
+  let dog = null;
+  let leash = null;
+  if (Math.random() < 0.35) {
+    const dogColor = DOG_COLORS[Math.floor(Math.random() * DOG_COLORS.length)];
+    const dogMesh = createDogMesh(dogColor);
+    // Hund läuft ~1.3m seitlich neben dem Passanten (weg von der Straße)
+    const sideSign = (px < 0) ? -1 : 1;
+    const offX = sideSign * (1.1 + Math.random() * 0.4);
+    const offZ = (Math.random() - 0.5) * 0.8; // leicht vor/hinter
+    dogMesh.position.set(px + offX, 0, pz + offZ);
+    scene.add(dogMesh);
+    dog = { mesh: dogMesh, offX, offZ };
+
+    // Leine: dünne Linie zwischen Passantenhand und Hundehals
+    const leashGeo = new THREE.BufferGeometry();
+    const leashPos = new Float32Array(6); // 2 Punkte × 3
+    leashGeo.setAttribute('position', new THREE.BufferAttribute(leashPos, 3));
+    const leashMat = new THREE.LineBasicMaterial({ color: 0x7a5230 });
+    leash = new THREE.Line(leashGeo, leashMat);
+    scene.add(leash);
+  }
+
+  peds.push({ mesh: g, dir: 1, spd: 0.015 + Math.random()*0.01, z1: pz1, z2: pz2, dog, leash });
 }
 spawnPed(-7.4,-50,-90,-10);
 spawnPed( 7.4, 18,  0, 70);
@@ -2395,12 +2455,19 @@ function drawMinimap(px, pz) {
     mc.fill();
   });
 
-  // Fußgänger (blaue Punkte)
+  // Fußgänger (blaue Punkte) + Hunde (grüne Punkte)
   mc.fillStyle = '#4488ff';
   peds.forEach(p => {
     mc.beginPath();
     mc.arc(mx(p.mesh.position.x), mz(p.mesh.position.z), 2.5, 0, Math.PI*2);
     mc.fill();
+    if (p.dog) {
+      mc.fillStyle = '#44cc66';
+      mc.beginPath();
+      mc.arc(mx(p.dog.mesh.position.x), mz(p.dog.mesh.position.z), 1.8, 0, Math.PI*2);
+      mc.fill();
+      mc.fillStyle = '#4488ff';
+    }
   });
 
   // Spieler immer in der Mitte (weißer Punkt)
@@ -2855,6 +2922,27 @@ function animate() {
     p.mesh.rotation.y  = p.dir > 0 ? Math.PI : 0;
     if (p.mesh.position.z > p.z2) p.dir = -1;
     if (p.mesh.position.z < p.z1) p.dir =  1;
+
+    // Hund folgt Passanten mit Offset
+    if (p.dog) {
+      const ped = p.mesh;
+      const dg = p.dog.mesh;
+      // Hund läuft mit kleinem natürlichen Versatz
+      dg.position.x = ped.position.x + p.dog.offX;
+      dg.position.z = ped.position.z + p.dog.offZ;
+      dg.rotation.y = ped.rotation.y; // gleiche Richtung wie Passant
+
+      // Leine aktualisieren: von Passantenhand zu Hundehals
+      if (p.leash) {
+        const pos = p.leash.geometry.attributes.position;
+        // Hand des Passanten: ~0.7m hoch, leicht zur Seite zum Hund hin
+        const handSide = p.dog.offX * 0.5;
+        pos.setXYZ(0, ped.position.x + handSide, 0.72, ped.position.z + p.dog.offZ * 0.3);
+        // Halsband des Hundes: ~0.32m hoch (Nacken)
+        pos.setXYZ(1, dg.position.x, 0.32, dg.position.z + 0.20);
+        pos.needsUpdate = true;
+      }
+    }
   });
 
   // ---- Beacon ----
