@@ -959,59 +959,90 @@ for (let t = -130; t <= 130; t += 11) {                                         
 // ================================================================
 //  BUILDINGS
 // ================================================================
-// GTA 3: Gebäudefarben — gedämpft, entsättigt, urban-grau
-const bColors = [0xbcb8ad, 0xacacac, 0xbcb09a, 0x9a6248, 0x7e3535];
+// GTA 3 / Liberty City: Gebäudefarben — gedeckt, urban-grau, verwittert
+// Backstein-Braun, Beton-Grau, verwaschenes Beige — niemals bunt
+const bColors = [0xb0a898, 0x9e9e9e, 0xb8a880, 0x8a5030, 0x722020];
 
 const lanterns = [];
 
 function addBuilding(cx, cz, w, d, h, ci, saddle) {
   const g = new THREE.Group();
   const col = bColors[ci % bColors.length];
+  // Dunklere Variante für Erdgeschoss / Akzente
+  const darkCol = Math.floor(col * 0.72);
 
-  // Body
-  const body = box(w, h, d, col, 0, h/2, 0);
-  g.add(body);
+  // Hauptkörper
+  g.add(box(w, h, d, col, 0, h/2, 0));
 
-  // Fenster
-  const wMat = new THREE.MeshLambertMaterial({ color: 0x90c8e8, transparent: true, opacity: 0.75 });
-  const rowCount = Math.max(1, Math.floor((h-1) / 2.5));
-  const colCount = Math.max(1, Math.floor((w-1) / 2.5));
+  // Erdgeschoss-Ladenfront (Liberty City: Geschäfte im EG)
+  // Dunkler Panel auf der Frontseite (kein extra Körper — kein Z-Fighting)
+  const shopH = Math.min(3.0, h * 0.30);
+  g.add(box(w * 0.68, shopH * 0.62, 0.09, 0x1a1820, 0, shopH * 0.40, d/2 + 0.04));
+  // Markise (Awning) — typisch für Liberty City Läden
+  const awnColors = [0x8b1a1a, 0x1a3a8b, 0x1a6a1a, 0x7a5a1a];
+  const awnCol = awnColors[ci % awnColors.length];
+  g.add(box(w * 0.72 + 0.4, 0.14, 0.80, awnCol, 0, shopH + 0.26, d/2 + 0.35));
+
+  // Fenster — dunkel (GTA3: man sieht NICHTS durch Scheiben)
+  // Variieren zwischen "unbeleuchtet" (fast schwarz) und "schwach beleuchtet" (dunkles Amber)
+  const rowCount = Math.max(1, Math.floor((h - shopH - 0.8) / 2.8));
+  const colCount = Math.max(1, Math.floor((w - 0.7) / 2.3));
   for (let r = 0; r < rowCount; r++) {
     for (let c = 0; c < colCount; c++) {
-      const wg = new THREE.BoxGeometry(0.75, 0.65, 0.05);
-      const wm = new THREE.Mesh(wg, wMat);
-      wm.position.set(-w/2 + 1.0 + c*2.5, 1.2 + r*2.5, d/2 + 0.01);
+      // GTA3: wenige Fenster leuchten schwach (nachts/abends Effekt, statisch)
+      const lit = ((ci * 7 + r * 5 + c * 3) % 5) === 0;
+      const winCol = lit ? 0x2a2a18 : 0x0a0c10;
+      const wm = new THREE.Mesh(
+        new THREE.BoxGeometry(0.82, 1.08, 0.07),
+        new THREE.MeshLambertMaterial({ color: winCol })
+      );
+      wm.position.set(-w/2 + 0.85 + c * 2.3, shopH + 0.90 + r * 2.8, d/2 + 0.02);
       g.add(wm);
     }
   }
 
-  // Dach
-  if (saddle) {
-    const rGeo = new THREE.CylinderGeometry(0, w*0.55, 2.5, 4);
-    const rMat = new THREE.MeshLambertMaterial({ color: 0x8b4010 });
-    const rMesh = new THREE.Mesh(rGeo, rMat);
-    rMesh.position.set(0, h + 1.25, 0);
-    rMesh.rotation.y = Math.PI/4;
-    rMesh.castShadow = true;
-    g.add(rMesh);
-    // snow on roof edge
-    const sm = box(w + 0.2, 0.15, d + 0.2, COL_SNOW, 0, h + 0.08, 0);
-    g.add(sm);
+  // Flachdach — Liberty City Stil: Brüstung (Parapet) rundherum
+  if (!saddle) {
+    const pCol = Math.floor(col * 0.82);
+    const pH = 0.42;
+    g.add(box(w + 0.30, pH, 0.24, pCol, 0, h + pH/2, d/2));    // vorne
+    g.add(box(w + 0.30, pH, 0.24, pCol, 0, h + pH/2, -d/2));   // hinten
+    g.add(box(0.24, pH, d + 0.30, pCol,  w/2, h + pH/2, 0));   // rechts
+    g.add(box(0.24, pH, d + 0.30, pCol, -w/2, h + pH/2, 0));   // links
+    // Schnee auf Dachfläche
+    g.add(box(w - 0.12, 0.11, d - 0.12, COL_SNOW, 0, h + 0.055, 0));
   } else {
-    const sm = box(w + 0.15, 0.2, d + 0.15, COL_SNOW, 0, h + 0.1, 0);
-    g.add(sm);
+    // Spitzdach (GTA3 Wohnhaus-Stil)
+    const rGeo = new THREE.CylinderGeometry(0, w * 0.52, 2.6, 4);
+    const rMat = new THREE.MeshLambertMaterial({ color: 0x7a3810 });
+    const rMesh = new THREE.Mesh(rGeo, rMat);
+    rMesh.position.set(0, h + 1.30, 0);
+    rMesh.rotation.y = Math.PI/4;
+    g.add(rMesh);
+    g.add(box(w + 0.22, 0.16, d + 0.22, COL_SNOW, 0, h + 0.08, 0));
   }
 
-  // Treppenstufen
+  // Feuertreppe-Andeutung — nur auf Desktop (zu viele Elemente für Mobile)
+  if (h >= 8 && !isMobile) {
+    const escCol = 0x2a2a2a;
+    g.add(box(0.08, h * 0.78, 0.08, escCol, -w/2 - 0.04, h * 0.39, d * 0.12));
+    g.add(box(0.08, h * 0.78, 0.08, escCol, -w/2 - 0.04, h * 0.39, -d * 0.12));
+    const levels = Math.floor(h / 3.2);
+    for (let lv = 0; lv < levels; lv++) {
+      const lx = (lv % 2 === 0) ? -w/2 - 0.02 : -w/2 + 0.48;
+      g.add(box(0.50 + (lv % 2) * 0.32, 0.06, 0.28, escCol, lx, 1.6 + lv * 3.2, d * 0.12));
+    }
+  }
+
+  // Eingangsstufen
   for (let s = 0; s < 2; s++) {
-    const st = box(1.4, 0.12*(s+1), 0.28*(s+1), 0x999999, 0, 0.06*(s+1), d/2 + 0.14*(s+1));
-    g.add(st);
+    g.add(box(1.4, 0.13*(s+1), 0.28*(s+1), 0x888888, 0, 0.065*(s+1), d/2 + 0.14*(s+1)));
   }
 
   g.position.set(cx, 0, cz);
   scene.add(g);
 
-  // Physics
+  // Physics (unverändert)
   const bb = new CANNON.Body({ mass: 0 });
   bb.addShape(new CANNON.Box(new CANNON.Vec3(w/2, h/2, d/2)));
   bb.position.set(cx, h/2, cz);
@@ -1173,19 +1204,27 @@ function addStreetSign(ix, iz, nsName, owName) {
   });
 });
 
-// --- Laternen ---
+// --- Laternen — GTA 3 Stil: dünner Pfosten, gebogener Arm, eckige Lampe ---
 function addLantern(px, pz) {
   const g = new THREE.Group();
-  const pole = cyl(0.06, 0.06, 5.5, 8, 0x555555, 0, 2.75, 0);
-  g.add(pole);
-  const arm  = box(0.6, 0.06, 0.06, 0x555555, 0.3, 5.55, 0);
-  g.add(arm);
-  const headMat = new THREE.MeshLambertMaterial({ color: 0xffee88, emissive: new THREE.Color(0xffcc44), emissiveIntensity: 0 });
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.2, 0.3), headMat);
-  head.position.set(0.6, 5.6, 0);
+  // Dünner dunkler Metallpfosten
+  g.add(cyl(0.05, 0.05, 5.6, 6, 0x2e2e2e, 0, 2.8, 0));
+  // Gebogener Arm (2 Boxen im Winkel — GTA3-typisch)
+  g.add(box(0.70, 0.06, 0.06, 0x2e2e2e, 0.35, 5.62, 0));
+  g.add(box(0.06, 0.28, 0.06, 0x2e2e2e, 0.68, 5.48, 0));
+  // Eckige Lampe (GTA3: keine Rundung)
+  const headMat = new THREE.MeshLambertMaterial({
+    color: 0xffee88,
+    emissive: new THREE.Color(0xffcc44),
+    emissiveIntensity: 0
+  });
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.16, 0.28), headMat);
+  head.position.set(0.68, 5.36, 0);
   g.add(head);
-  const pl = new THREE.PointLight(0xffcc55, 0, 22);
-  pl.position.set(0.6, 5.55, 0);
+  // Kleiner Sockel unter Lampe
+  g.add(box(0.14, 0.10, 0.14, 0x2e2e2e, 0.68, 5.44, 0));
+  const pl = new THREE.PointLight(0xffcc55, 0, 24);
+  pl.position.set(0.68, 5.32, 0);
   g.add(pl);
   g.position.set(px, 0, pz);
   g.userData.pointLight = pl;
@@ -1633,16 +1672,190 @@ addDriveway(-11,-68,3,5); addDriveway(11,-55,3,5);
 addDriveway(-11,  8,3,5); addDriveway(11, 22,3,5);
 
 // ================================================================
+//  AMPELN — GTA 3 Stil (3er-Ampel vertikal, Metallgehäuse)
+//  Mobile: nur wenige Ampeln, kein Physik-Body nötig (dekorativ)
+// ================================================================
+function addTrafficLight(px, pz, ry) {
+  const g = new THREE.Group();
+  // Pfosten (dunkles Metall)
+  g.add(cyl(0.06, 0.06, 5.2, 6, 0x222222, 0, 2.6, 0));
+  // Querarm
+  g.add(box(0.72, 0.07, 0.07, 0x222222, 0.36, 5.25, 0));
+  // Ampelgehäuse (schwarz, eckig — GTA3 Stil)
+  g.add(box(0.34, 1.00, 0.26, 0x111111, 0.70, 5.20, 0));
+  // Drei Leuchten: Rot / Gelb / Grün
+  g.add(box(0.22, 0.24, 0.10, 0xcc0000, 0.70, 5.52, 0.09)); // ROT
+  g.add(box(0.22, 0.24, 0.10, 0x886600, 0.70, 5.20, 0.09)); // GELB
+  g.add(box(0.22, 0.24, 0.10, 0x008800, 0.70, 4.88, 0.09)); // GRÜN
+  g.position.set(px, 0, pz);
+  g.rotation.y = ry || 0;
+  scene.add(g);
+}
+// Ampeln an den Hauptkreuzungen (nur x=0,z=0 und 4 weitere — Mobile-Performance)
+[ [8.0, 8.0, 0], [-8.0, 8.0, Math.PI], [8.0, -8.0, Math.PI/2], [-8.0, -8.0, -Math.PI/2],
+  [88.0, 8.0, 0], [-88.0, 8.0, Math.PI], [8.0, -88.0, Math.PI/2], [-8.0, -88.0, -Math.PI/2],
+  [8.0, 88.0, 0], [-8.0, 88.0, Math.PI],
+].forEach(([x,z,r]) => addTrafficLight(x, z, r));
+
+// ================================================================
+//  HYDRANTEN — GTA 3 Stil (kleine rote eckige Objekte am Bordstein)
+//  Mobile: sehr einfache Geometrie (3 Boxen)
+// ================================================================
+function addHydrant(px, pz) {
+  const g = new THREE.Group();
+  g.add(box(0.22, 0.14, 0.22, 0xaa1111, 0, 0.07, 0)); // Basis
+  g.add(box(0.18, 0.36, 0.18, 0xcc1111, 0, 0.29, 0)); // Körper
+  g.add(box(0.26, 0.09, 0.26, 0xaa1111, 0, 0.52, 0)); // Kappe
+  g.add(box(0.11, 0.09, 0.07, 0x881111, -0.15, 0.29, 0)); // Ventil L
+  g.add(box(0.11, 0.09, 0.07, 0x881111,  0.15, 0.29, 0)); // Ventil R
+  g.position.set(px, 0, pz);
+  scene.add(g);
+}
+[ [-10.5,-72],[-10.5,-38],[-10.5,14],[-10.5,50],[-10.5,82],
+   [10.5,-56],[10.5,-20],[10.5,28],[10.5,62],[10.5,88],
+   [-72,-10.5],[-44,-10.5],[22,10.5],[52,10.5],
+].forEach(([x,z]) => addHydrant(x, z));
+
+// ================================================================
+//  TELEFONZELLEN — GTA 3 Stil (rechteckige Box, Glasscheiben)
+//  Typisch für Liberty City 2001
+// ================================================================
+function addPhoneBooth(px, pz, ry) {
+  const g = new THREE.Group();
+  // Metallrahmen
+  g.add(box(0.92, 2.35, 0.92, 0x2a2a2a, 0, 1.175, 0));
+  // Glasscheiben (3 Seiten — dunkel-blau)
+  const gm = new THREE.MeshLambertMaterial({ color: 0x1a2530, transparent: true, opacity: 0.70 });
+  [[0, 1.18, 0.43],[0, 1.18, -0.43]].forEach(([x,y,z]) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(0.82, 1.96, 0.07), gm);
+    m.position.set(x, y, z); g.add(m);
+  });
+  const mS = new THREE.Mesh(new THREE.BoxGeometry(0.07, 1.96, 0.82), gm);
+  mS.position.set(-0.43, 1.18, 0); g.add(mS);
+  // Dach
+  g.add(box(0.94, 0.13, 0.94, 0x2a2a2a, 0, 2.41, 0));
+  g.position.set(px, 0, pz);
+  g.rotation.y = ry || 0;
+  scene.add(g);
+}
+// Telefonzellen nur auf Desktop (mehr Details)
+if (!isMobile) {
+  [ [-11.2,-62,0],[11.2,42,Math.PI],[-11.2,24,0],[11.2,-32,Math.PI] ].forEach(([x,z,r]) => addPhoneBooth(x,z,r));
+}
+
+// ================================================================
+//  ZEITUNGSAUTOMATEN — GTA 3 Stil (kleine bunte Kästen am Gehweg)
+// ================================================================
+function addNewsBox(px, pz, col) {
+  const g = new THREE.Group();
+  g.add(box(0.44, 0.68, 0.32, col, 0, 0.34, 0));             // Korpus
+  g.add(box(0.46, 0.09, 0.34, Math.floor(col*0.65), 0, 0.72, 0)); // Deckel
+  g.add(box(0.40, 0.14, 0.26, 0x777777, 0, 0.07, 0));        // Sockel
+  g.position.set(px, 0, pz);
+  scene.add(g);
+}
+[ [-10.9,-46,0x1a3a8a],[-10.9,-44,0x8a1a1a],[-10.9,-42,0x1a6a1a],
+   [10.9, 30,0x8a8a1a],[10.9,  32,0x1a3a8a],
+  [-10.9, 72,0x6a1a8a],[-10.9, 74,0x8a3a1a],
+].forEach(([x,z,c]) => addNewsBox(x,z,c));
+
+// ================================================================
+//  GROSSE CONTAINER (Müll/Bauschutt) — GTA 3 Stil
+//  Statische Physik, umwerfbar NUR wenn sehr schwer getroffen
+// ================================================================
+function addDumpster(px, pz, ry, col) {
+  const c = col || (Math.random() < 0.5 ? 0x2a5a2a : 0x4a3a22);
+  const g = new THREE.Group();
+  g.add(box(1.82, 0.95, 3.64, c, 0, 0.525, 0));              // Körper
+  // Offener Deckel (leicht geneigt)
+  const lid = box(1.84, 0.09, 1.84, Math.floor(c*0.72), 0, 1.09, 0.94);
+  lid.rotation.x = -0.42; g.add(lid);
+  // Metallverstärkungsstreifen
+  g.add(box(1.84, 0.07, 0.07, 0x1a1a1a, 0, 0.56,  1.83));
+  g.add(box(1.84, 0.07, 0.07, 0x1a1a1a, 0, 0.56, -1.83));
+  g.add(box(1.84, 0.07, 0.07, 0x1a1a1a, 0, 0.88,  0));
+  // Räder hinten
+  g.add(cyl(0.13, 0.13, 0.15, 6, 0x111111, -0.72, 0.13, -1.74, 0, Math.PI/2));
+  g.add(cyl(0.13, 0.13, 0.15, 6, 0x111111,  0.72, 0.13, -1.74, 0, Math.PI/2));
+  g.position.set(px, 0, pz);
+  g.rotation.y = ry || 0;
+  scene.add(g);
+  // Statischer Physik-Kollider
+  const cb = new CANNON.Body({ mass: 0 });
+  cb.addShape(new CANNON.Box(new CANNON.Vec3(0.91, 0.525, 1.82)));
+  cb.position.set(px, 0.525, pz);
+  cb.quaternion.setFromAxisAngle(new CANNON.Vec3(0,1,0), ry || 0);
+  world.addBody(cb);
+}
+[ [-17,-54,0],[ 17,20,Math.PI],[-17,38,0],[ 17,-74,Math.PI/2],
+  [-17,70,0],[  17,60,0],
+].forEach(([x,z,r]) => addDumpster(x,z,r));
+
+// ================================================================
+//  BAUZÄUNE — GTA 3 Stil (orange-weiß abwechselnd)
+// ================================================================
+function addConstructionFence(x1, z1, x2, z2) {
+  const dx = x2-x1, dz = z2-z1, len = Math.hypot(dx, dz);
+  if (len < 0.5) return;
+  const ay = Math.atan2(dz, dx);
+  const pW = 1.20, cnt = Math.ceil(len / pW);
+  for (let i = 0; i < cnt; i++) {
+    const t = (i + 0.5) / cnt;
+    const px2 = x1 + dx*t, pz2 = z1 + dz*t;
+    const isOrange = i % 2 === 0;
+    scene.add(box(pW*0.90, 1.12, 0.09, isOrange ? 0xf56b00 : 0xeeeeee, px2, 0.64, pz2, -ay));
+  }
+  // Pfosten
+  const postN = Math.ceil(len / 2.4);
+  for (let i = 0; i <= postN; i++) {
+    const t = i / postN;
+    scene.add(cyl(0.05, 0.05, 1.32, 6, 0x777777, x1+dx*t, 0.66, z1+dz*t));
+  }
+}
+// Bauzäune: auf Mobile nur einen, auf Desktop alle drei
+addConstructionFence(-14.5,-52,-14.5,-42);
+if (!isMobile) {
+  addConstructionFence( 14.5, 14,  14.5, 24);
+  addConstructionFence(-14.5, 76,-14.5, 86);
+}
+
+// ================================================================
+//  WERBETAFELN — GTA 3 Stil (farbige Schilder auf Pfosten)
+//  Liberty City: überall Werbung, bunte Farben auf grauem Hintergrund
+// ================================================================
+function addBillboard(px, pz, w, h, poleH, ry, col) {
+  const g = new THREE.Group();
+  g.add(cyl(0.09, 0.09, poleH, 6, 0x333333, 0, poleH/2, 0));  // Pfosten
+  g.add(box(w, h, 0.16, col, 0, poleH + h/2, 0));              // Schild
+  // Rahmen
+  g.add(box(w+0.24, 0.11, 0.18, 0x333333, 0, poleH,       0));
+  g.add(box(w+0.24, 0.11, 0.18, 0x333333, 0, poleH + h,   0));
+  g.add(box(0.11, h+0.22, 0.18, 0x333333, -w/2, poleH+h/2, 0));
+  g.add(box(0.11, h+0.22, 0.18, 0x333333,  w/2, poleH+h/2, 0));
+  g.position.set(px, 0, pz);
+  g.rotation.y = ry || 0;
+  scene.add(g);
+}
+const _bbCols = [0x8b1a1a, 0x1a3a8b, 0x1a6a1a, 0x8b6a1a, 0x4a1a8b];
+[ [-24,-38,3.6,2.1,5.5, 0,              _bbCols[0]],
+  [ 24,-38,3.6,2.1,5.5, Math.PI,        _bbCols[1]],
+  [-24, 48,3.6,2.1,5.5, 0,              _bbCols[2]],
+  [ 24, 48,3.6,2.1,5.5, Math.PI,        _bbCols[3]],
+  [-24,  8,3.6,2.1,5.5, 0,              _bbCols[4]],
+  [ 24,  8,3.6,2.1,5.5, Math.PI,        _bbCols[0]],
+].forEach(([x,z,w,h,ph,r,c]) => addBillboard(x,z,w,h,ph,r,c));
+
+// ================================================================
 //  FAHRZEUGMODELL-BUILDER (5 Typen)
 //  0=Limousine  1=Kombi  2=SUV  3=Kleinwagen  4=Transporter
 // ================================================================
 // GTA 3: Parkauto-Farben — gedeckt, urban, nicht zu bunt
-const pCarColors = [0xa8a8a8, 0x707070, 0x222222, 0x883322, 0x223388, 0x2e5e2e];
-const CAR_TYPE_COUNT = 5;
+const pCarColors = [0x8b2323, 0x234578, 0x2d5a3d, 0x6a6a72, 0x1a1a1a, 0xd4c9a8];
+const CAR_TYPE_COUNT = 6;
 
-// Gemeinsames Glasmaterial für alle Fahrzeugscheiben
+// GTA 3: Fast-schwarze Scheiben — man sieht keine Insassen
 const _carGlassMat = new THREE.MeshLambertMaterial({
-  color: 0x88aacc, transparent: true, opacity: 0.52
+  color: 0x1a1a22, transparent: true, opacity: 0.92
 });
 
 // Dunklere Farbvariante für Spiegel / Akkzente
@@ -1660,129 +1873,266 @@ function _addGlass(g, w, h, d, px, py, pz, rx) {
 }
 
 /**
- * Baut ein Fahrzeugmodell in Gruppe g.
- * type: 0=Limousine, 1=Kombi, 2=SUV, 3=Kleinwagen, 4=Transporter
+ * GTA 3 Style Fahrzeugmodell-Builder
+ * type: 0=Sedan(Kuruma)  1=Taxi(Cabbie)  2=Mafia(Sentinel)
+ *       3=Pickup(Bobcat) 4=Van(Rumpo)    5=SUV(Landstalker)
  */
 function buildCarMesh(g, col, type) {
-  const BUMPER = 0x2a2a2a;
-  const GRILL  = 0x131313;
-  const dark   = _darkShade(col);
-  // Radradius je Typ
-  const WR = [0.30, 0.31, 0.37, 0.28, 0.34][type];
+  // GTA 3 Farb-Overrides
+  if (type === 1) col = 0xf5c842;                          // Taxi immer gelb
+  if (type === 2) col = (Math.random()<0.55) ? 0x1a1a22 : 0x0e1c3a; // Mafia: schwarz/navy
 
-  // ----------------------------------------------------------------
-  //  Typ 4: Transporter / Van (kastenförmig, hohe Kabine)
-  // ----------------------------------------------------------------
-  if (type === 4) {
-    const bw = 2.02, bd = 5.0, wr = WR, bodyH = 1.90;
-    const by = wr + bodyH / 2;
-    // Einheitlich hohe Karosserie (Body + Kabine verschmelzen)
-    g.add(box(bw, bodyH, bd, col, 0, by, 0));
-    // Frontscheibe (nahezu vertikal)
-    _addGlass(g, bw - 0.22, 0.72, 0.06, 0, wr + bodyH - 0.42, bd / 2 + 0.03, 0.08);
-    // Seitenfenster (nur Fahrerbereich vorne)
-    const swz4 = bd / 2 - 0.65;
-    _addGlass(g, 0.05, 0.62, 1.08, -bw / 2 - 0.01, wr + bodyH - 0.44, swz4, 0);
-    _addGlass(g, 0.05, 0.62, 1.08,  bw / 2 + 0.01, wr + bodyH - 0.44, swz4, 0);
-    // Keine Heckscheibe (Ladebereich)
-    // Stoßstangen
-    g.add(box(bw + 0.10, 0.22, 0.16, BUMPER, 0, wr + 0.15, bd / 2 + 0.08));
-    g.add(box(bw + 0.10, 0.20, 0.15, BUMPER, 0, wr + 0.13, -bd / 2 - 0.075));
+  const CHROME = 0x888899;  // GTA3 Chrom-Stoßstangen
+  const DARK_W = 0x12121a;  // GTA3 Fast-schwarze Fenster
+  const HEAD   = 0xffee88;  // Scheinwerfer gelb-weiß
+  const TAIL   = 0xdd1100;  // Rücklichter rot
+  const TIRE   = 0x181818;  // Reifen fast schwarz
+  const HUB    = 0x555560;  // Radkappe dunkelgrau
+  const GRILL  = 0x0d0d0d;  // Kühlergrill fast schwarz
+  const SNOW_C = 0xdce4ee;  // Schnee auf Dach
+
+  // Blockiges Fenster direkt auf Karosserie
+  function addWindow(wx, wy, wz, ww, wh, wd) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(ww, wh, wd),
+      new THREE.MeshLambertMaterial({ color: DARK_W }));
+    m.position.set(wx, wy, wz);
+    g.add(m);
+  }
+  // Rad: Reifen + eckige Felge
+  function addWheel(wx, wy, wz, wr, ww) {
+    g.add(cyl(wr, wr, ww, 8, TIRE, wx, wy, wz, 0, Math.PI/2));
+    g.add(cyl(wr*0.60, wr*0.60, ww+0.01, 6, HUB, wx, wy, wz, 0, Math.PI/2));
+  }
+
+  // ================================================================
+  // TYPE 0: SEDAN — GTA3 Kuruma (3-Box: Haube / Kabine / Kofferraum)
+  // Langes flaches Profil, niedrige Dachlinie, Liberty City Look
+  // ================================================================
+  if (type === 0) {
+    const wr = 0.30, bw = 2.02;
+    // Motorhaube (vorne, flach)
+    g.add(box(bw, 0.46, 1.72, col, 0, wr+0.25, 1.44));
+    // Türbereich (Mitte)
+    g.add(box(bw, 0.52, 1.88, col, 0, wr+0.29, -0.06));
+    // Kofferraum (hinten, niedriger)
+    g.add(box(bw, 0.42, 1.06, col, 0, wr+0.23, -1.54));
+    // Kabine (niedrig — GTA3-typisch flaches Dach)
+    const caby = wr+0.52+0.44/2;
+    g.add(box(1.86, 0.44, 1.94, col, 0, caby, -0.08));
+    // Fenster (fast schwarz — man sieht KEINE Insassen)
+    addWindow(0,    caby+0.01,  0.96, 1.70, 0.34, 0.07);  // Frontscheibe
+    addWindow(0,    caby-0.01, -0.96, 1.62, 0.30, 0.07);  // Heckscheibe
+    addWindow(-bw/2-0.01, caby, -0.08, 0.07, 0.34, 1.58); // links
+    addWindow( bw/2+0.01, caby, -0.08, 0.07, 0.34, 1.58); // rechts
+    // Chrome-Stoßstangen (markant abgesetzt)
+    g.add(box(bw+0.20, 0.19, 0.13, CHROME, 0, wr+0.12, 2.38));
+    g.add(box(bw+0.20, 0.17, 0.13, CHROME, 0, wr+0.10, -2.10));
     // Kühlergrill
-    g.add(box(bw * 0.55, 0.22, 0.08, GRILL, 0, wr + 0.28, bd / 2 + 0.04));
-    // Seitenspiegel (groß, weit oben)
-    const mz4 = bd / 2 - 0.30, my4 = wr + bodyH - 0.58;
-    g.add(box(0.15, 0.11, 0.20, dark, -bw / 2 - 0.075, my4, mz4));
-    g.add(box(0.15, 0.11, 0.20, dark,  bw / 2 + 0.075, my4, mz4));
-    // Türlinie (Trennung Fahrerhaus / Ladebereich)
-    g.add(box(0.04, bodyH * 0.80, bd * 0.01, dark, -bw / 2 - 0.01, by, bd * 0.08));
-    g.add(box(0.04, bodyH * 0.80, bd * 0.01, dark,  bw / 2 + 0.01, by, bd * 0.08));
-    // Radkästen
-    const wz14 = bd * 0.30, wz24 = -bd * 0.30;
-    [wz14, wz24].forEach(wz => g.add(box(bw + 0.06, 0.07, 1.02, BUMPER, 0, wr + 0.04, wz)));
-    // Räder (inkl. Radkappe)
-    const wsx4 = bw / 2 + 0.06;
-    [[-wsx4, wr, wz14], [wsx4, wr, wz14], [-wsx4, wr, wz24], [wsx4, wr, wz24]].forEach(([x, y, z]) => {
-      g.add(cyl(wr, wr, 0.25, 10, 0x222222, x, y, z, 0, Math.PI / 2));
-      g.add(cyl(wr * 0.55, wr * 0.55, 0.26, 8, 0x777777, x, y, z, 0, Math.PI / 2));
-    });
-    // Schnee auf Dach
-    g.add(box(bw - 0.18, 0.13, bd - 0.22, COL_SNOW, 0, wr + bodyH + 0.065, 0));
+    g.add(box(bw*0.58, 0.24, 0.08, GRILL, 0, wr+0.22, 2.35));
+    // Scheinwerfer (große eckige Blöcke — GTA3 Kernmerkmal)
+    g.add(box(0.56, 0.22, 0.09, HEAD, -0.60, wr+0.28, 2.37));
+    g.add(box(0.56, 0.22, 0.09, HEAD,  0.60, wr+0.28, 2.37));
+    // Rücklichter (rote Rechtecke)
+    g.add(box(0.56, 0.20, 0.09, TAIL, -0.60, wr+0.24, -2.10));
+    g.add(box(0.56, 0.20, 0.09, TAIL,  0.60, wr+0.24, -2.10));
+    // Radkasten-Streifen (eckige Ausschnitt-Andeutung)
+    [1.30, -1.22].forEach(wz => g.add(box(bw+0.07, 0.07, 0.92, CHROME, 0, wr+0.03, wz)));
+    // Räder (8-segmentig = gut für Mobile)
+    const wx0 = bw/2+0.07;
+    [1.30, -1.22].forEach(wz => { addWheel(-wx0, wr, wz, wr, 0.25); addWheel(wx0, wr, wz, wr, 0.25); });
+    // Schnee auf Kabinendach
+    g.add(box(1.82, 0.11, 1.82, SNOW_C, 0, caby+0.44/2+0.055, -0.08));
     return;
   }
 
-  // ----------------------------------------------------------------
-  //  Typen 0–3: klassische PKW-Bauweise (Unterbau + Kabine)
-  // ----------------------------------------------------------------
-  // [bw, bh, bd, cw, ch, cd, czOff, wsAngle, rwAngle, roofRack]
-  const CFG = [
-    [1.80, 0.55, 4.50, 1.60, 0.48, 2.00,  0.22, 0.28, -0.38, false], // 0 Limousine (flach, lang)
-    [1.80, 0.55, 4.60, 1.60, 0.62, 2.65, -0.10, 0.22, -0.12, true ], // 1 Kombi (längeres Heck)
-    [1.92, 0.72, 4.40, 1.74, 0.72, 2.30,  0.08, 0.20, -0.22, true ], // 2 SUV (höher, breiter)
-    [1.70, 0.52, 3.60, 1.55, 0.65, 1.85,  0.10, 0.30, -0.36, false], // 3 Kleinwagen (kurz, kompakt)
-  ];
-  const [bw, bh, bd, cw, ch, cd, czOff, wsA, rwA, roofRack] = CFG[type];
-  const wr = WR;
-  const by  = wr + bh / 2;       // Unterbau-Mitte Y
-  const cty = wr + bh + ch / 2;  // Kabinen-Mitte Y
-
-  // Unterbau / Karosserie
-  g.add(box(bw, bh, bd, col, 0, by, 0));
-
-  // Stoßstangen (vorne + hinten)
-  g.add(box(bw + 0.08, 0.17, 0.13, BUMPER, 0, wr + 0.12,  bd / 2 + 0.065));
-  g.add(box(bw + 0.08, 0.15, 0.13, BUMPER, 0, wr + 0.10, -bd / 2 - 0.065));
-
-  // Kühlergrill vorne
-  g.add(box(bw * 0.58, bh * 0.36, 0.07, GRILL, 0, wr + bh * 0.28, bd / 2 + 0.03));
-
-  // Kabine
-  g.add(box(cw, ch, cd, col, 0, cty, czOff));
-
-  // Frontscheibe
-  _addGlass(g, cw - 0.08, ch - 0.06, 0.06, 0, cty + 0.02, czOff + cd / 2 + 0.03, wsA);
-  // Heckscheibe
-  _addGlass(g, cw - 0.10, ch - 0.10, 0.06, 0, cty + 0.02, czOff - cd / 2 - 0.03, rwA);
-  // Seitenscheiben (links + rechts)
-  const swh = ch - 0.14, swd = cd * 0.70;
-  _addGlass(g, 0.05, swh, swd, -cw / 2 - 0.01, cty, czOff);
-  _addGlass(g, 0.05, swh, swd,  cw / 2 + 0.01, cty, czOff);
-
-  // Seitenspiegel (kleine Boxen vorne an der Kabine)
-  const mz = czOff + cd / 2 - 0.22;
-  g.add(box(0.10, 0.07, 0.14, dark, -bw / 2 - 0.055, cty - 0.14, mz));
-  g.add(box(0.10, 0.07, 0.14, dark,  bw / 2 + 0.055, cty - 0.14, mz));
-
-  // Türlinien (B-Säulen-Trennung, dünne dunkle Streifen)
-  const pillarZ = czOff + (type === 1 ? 0.05 : 0.0);
-  g.add(box(0.04, ch * 0.85, bd * 0.012, dark, -cw / 2 - 0.01, cty, pillarZ));
-  g.add(box(0.04, ch * 0.85, bd * 0.012, dark,  cw / 2 + 0.01, cty, pillarZ));
-
-  // Radkästen (leicht dunklere Streifen über den Rädern)
-  const wz1 = bd * 0.295, wz2 = -bd * 0.295;
-  [wz1, wz2].forEach(wz => g.add(box(bw + 0.04, 0.06, 0.85, BUMPER, 0, wr + 0.03, wz)));
-
-  // Räder (Reifen + Radkappe)
-  const wsx = bw / 2 + 0.04;
-  [[-wsx, wr, wz1], [wsx, wr, wz1], [-wsx, wr, wz2], [wsx, wr, wz2]].forEach(([x, y, z]) => {
-    g.add(cyl(wr, wr, 0.22, 10, 0x222222, x, y, z, 0, Math.PI / 2));
-    g.add(cyl(wr * 0.58, wr * 0.58, 0.23, 8, 0x777777, x, y, z, 0, Math.PI / 2));
-  });
-
-  // Dachreling (Kombi + SUV)
-  if (roofRack) {
-    const rry = cty + ch / 2 + 0.04;
-    const rrw = cw - 0.26;
-    // Querstreben
-    g.add(box(rrw, 0.05, 0.08, 0x888888, 0, rry, czOff + cd * 0.33));
-    g.add(box(rrw, 0.05, 0.08, 0x888888, 0, rry, czOff - cd * 0.33));
-    // Längsschienen
-    g.add(box(0.05, 0.06, cd * 0.73, 0x888888, -rrw / 2, rry, czOff));
-    g.add(box(0.05, 0.06, cd * 0.73, 0x888888,  rrw / 2, rry, czOff));
+  // ================================================================
+  // TYPE 1: TAXI — GTA3 Cabbie (Checker-Cab, breit, kastig, GELB)
+  // Breiter und höher als Sedan, markantes Dachschild
+  // ================================================================
+  if (type === 1) {
+    const wr = 0.31, bw = 2.16;
+    const by = wr+0.64;
+    // Hauptkörper (breit + leicht höher als Sedan)
+    g.add(box(bw, 0.66, 4.68, col, 0, by, 0));
+    // Kabine (breit, kastenförmig — Cabbie-Silhouette)
+    const caby = by+0.66/2+0.56/2;
+    g.add(box(2.04, 0.56, 2.28, col, 0, caby, 0.06));
+    // Fenster
+    addWindow(0,    caby+0.01,  1.13, 1.88, 0.44, 0.08);  // vorne
+    addWindow(0,    caby-0.01, -1.13, 1.80, 0.40, 0.08);  // hinten
+    addWindow(-bw/2-0.01, caby, 0.06, 0.08, 0.44, 1.84);  // links
+    addWindow( bw/2+0.01, caby, 0.06, 0.08, 0.44, 1.84);  // rechts
+    // Stoßstangen (dicker — Cabbie-typisch)
+    g.add(box(bw+0.24, 0.22, 0.15, CHROME, 0, wr+0.14, 2.43));
+    g.add(box(bw+0.24, 0.20, 0.15, CHROME, 0, wr+0.12, -2.43));
+    g.add(box(bw*0.52, 0.30, 0.09, GRILL, 0, wr+0.28, 2.39));
+    // Scheinwerfer (quadratisch, groß)
+    g.add(box(0.60, 0.26, 0.10, HEAD, -0.70, wr+0.32, 2.41));
+    g.add(box(0.60, 0.26, 0.10, HEAD,  0.70, wr+0.32, 2.41));
+    g.add(box(0.62, 0.24, 0.10, TAIL, -0.70, wr+0.28, -2.42));
+    g.add(box(0.62, 0.24, 0.10, TAIL,  0.70, wr+0.28, -2.42));
+    // TAXI-Dachschild (Checker-Cab Erkennungszeichen)
+    const sy = caby+0.56/2;
+    g.add(box(0.72, 0.32, 0.34, 0xf5c842, 0, sy+0.16, 0.30));
+    g.add(box(0.09, 0.16, 0.09, 0x444444, -0.25, sy+0.08, 0.30));
+    g.add(box(0.09, 0.16, 0.09, 0x444444,  0.25, sy+0.08, 0.30));
+    // Radkästen
+    [1.48, -1.34].forEach(wz => g.add(box(bw+0.07, 0.08, 1.02, CHROME, 0, wr+0.04, wz)));
+    const wx1 = bw/2+0.07;
+    [1.48, -1.34].forEach(wz => { addWheel(-wx1, wr, wz, wr, 0.27); addWheel(wx1, wr, wz, wr, 0.27); });
+    g.add(box(2.00, 0.11, 2.16, SNOW_C, 0, caby+0.56/2+0.055, 0.06));
+    return;
   }
 
-  // Schnee auf Dach
-  g.add(box(cw - 0.10, 0.11, cd - 0.10, COL_SNOW, 0, cty + ch / 2 + 0.055, czOff));
+  // ================================================================
+  // TYPE 2: MAFIA/SENTINEL — Prestige-Wagen, dunkel, lange Haube
+  // Schwarz/Navy — Mafia-Wagen Liberty City Stil
+  // ================================================================
+  if (type === 2) {
+    const wr = 0.31, bw = 1.98;
+    // Lange Motorhaube (Prestige-Silhouette)
+    g.add(box(bw, 0.50, 1.94, col, 0, wr+0.28, 1.60));
+    // Türbereich
+    g.add(box(bw, 0.56, 2.58, col, 0, wr+0.32, -0.14));
+    // Kofferraum (mittelgroß)
+    g.add(box(bw, 0.46, 1.12, col, 0, wr+0.27, -1.70));
+    // Niedrige elegante Kabine
+    const caby = wr+0.56+0.42/2;
+    g.add(box(1.82, 0.42, 1.86, col, 0, caby, -0.14));
+    // Fenster (extrem dunkel — Mafia-Tönungsscheiben)
+    addWindow(0,    caby+0.01,  0.92, 1.66, 0.32, 0.08);
+    addWindow(0,    caby-0.01, -0.92, 1.58, 0.28, 0.08);
+    addWindow(-bw/2-0.01, caby, -0.14, 0.08, 0.32, 1.52);
+    addWindow( bw/2+0.01, caby, -0.14, 0.08, 0.32, 1.52);
+    // Stoßstangen (markant — Mafia-Prestige-Look)
+    g.add(box(bw+0.26, 0.22, 0.17, CHROME, 0, wr+0.13, 2.60));
+    g.add(box(bw+0.26, 0.20, 0.17, CHROME, 0, wr+0.11, -2.30));
+    g.add(box(bw*0.54, 0.24, 0.09, GRILL, 0, wr+0.25, 2.56));
+    g.add(box(0.54, 0.22, 0.10, HEAD, -0.64, wr+0.27, 2.58));
+    g.add(box(0.54, 0.22, 0.10, HEAD,  0.64, wr+0.27, 2.58));
+    g.add(box(0.54, 0.20, 0.10, TAIL, -0.64, wr+0.23, -2.30));
+    g.add(box(0.54, 0.20, 0.10, TAIL,  0.64, wr+0.23, -2.30));
+    [1.54, -1.40].forEach(wz => g.add(box(bw+0.07, 0.06, 0.90, CHROME, 0, wr+0.03, wz)));
+    const wx2 = bw/2+0.07;
+    [1.54, -1.40].forEach(wz => { addWheel(-wx2, wr, wz, wr, 0.25); addWheel(wx2, wr, wz, wr, 0.25); });
+    g.add(box(1.78, 0.10, 1.74, SNOW_C, 0, caby+0.42/2+0.05, -0.14));
+    return;
+  }
+
+  // ================================================================
+  // TYPE 3: PICKUP/BOBCAT — Offene Ladefläche, große Räder, robust
+  // Höher als Limousinen, Cowboy-Truck Liberty-City-Stil
+  // ================================================================
+  if (type === 3) {
+    const wr = 0.38, bw = 2.10;
+    const by = wr+0.62;
+    // Fahrerhaus-Unterbau (vordere Hälfte)
+    g.add(box(bw, 0.64, 2.38, col, 0, by, 0.82));
+    // Offene Ladefläche: niedrige Seitenwände
+    g.add(box(bw, 0.26, 2.68, col, 0, wr+0.16, -1.06));
+    // Ladeboden (dunkel — typischer Stahlboden)
+    g.add(box(bw-0.22, 0.07, 2.56, 0x252020, 0, wr+0.28, -1.06));
+    // Heckklappe (Tailgate)
+    g.add(box(bw, 0.42, 0.16, col, 0, wr+0.34, -2.48));
+    // Kabine oben
+    const caby = by+0.64/2+0.58/2;
+    g.add(box(1.96, 0.58, 1.72, col, 0, caby, 0.82));
+    // Fenster
+    addWindow(0,    caby+0.01,  0.82+0.85, 1.80, 0.46, 0.08);
+    addWindow(0,    caby-0.01,  0.82-0.85, 1.72, 0.42, 0.08);
+    addWindow(-bw/2-0.01, caby, 0.82, 0.08, 0.46, 1.40);
+    addWindow( bw/2+0.01, caby, 0.82, 0.08, 0.46, 1.40);
+    // Stoßstangen (robust, Truck-typisch)
+    g.add(box(bw+0.26, 0.24, 0.18, CHROME, 0, wr+0.16, 2.08));
+    g.add(box(bw+0.26, 0.22, 0.18, CHROME, 0, wr+0.14, -2.55));
+    g.add(box(bw*0.58, 0.30, 0.10, GRILL, 0, wr+0.32, 2.04));
+    g.add(box(0.58, 0.28, 0.11, HEAD, -0.66, wr+0.36, 2.06));
+    g.add(box(0.58, 0.28, 0.11, HEAD,  0.66, wr+0.36, 2.06));
+    g.add(box(0.58, 0.26, 0.11, TAIL, -0.66, wr+0.32, -2.52));
+    g.add(box(0.58, 0.26, 0.11, TAIL,  0.66, wr+0.32, -2.52));
+    // Große Radkästen (Truck-typisch)
+    [1.34, -1.12].forEach(wz => g.add(box(bw+0.09, 0.09, 1.06, CHROME, 0, wr+0.04, wz)));
+    const wx3 = bw/2+0.09;
+    [1.34, -1.12].forEach(wz => { addWheel(-wx3, wr, wz, wr, 0.30); addWheel(wx3, wr, wz, wr, 0.30); });
+    // Schnee: Kabinendach + Ladefläche
+    g.add(box(1.92, 0.11, 1.60, SNOW_C, 0, caby+0.58/2+0.055, 0.82));
+    g.add(box(bw-0.26, 0.13, 2.42, SNOW_C, 0, wr+0.28, -1.06));
+    return;
+  }
+
+  // ================================================================
+  // TYPE 4: VAN/RUMPO — Kastenwagen, sehr hoch, kaum Fenster
+  // Liberty City Lieferwagen — kastig, düster, keine Heckscheibe
+  // ================================================================
+  if (type === 4) {
+    const wr = 0.34, bw = 2.08, bodyH = 1.96, bd = 5.14;
+    const by = wr+bodyH/2;
+    // Hauptkörper (kastenförmig — das Kernelement)
+    g.add(box(bw, bodyH, bd, col, 0, by, 0));
+    // Frontscheibe (fast senkrecht — typisch für Transporter)
+    addWindow(0, by+bodyH/2-0.42, bd/2, bw-0.26, 0.72, 0.09);
+    // Seitenfenster NUR Fahrerbereich (hinten keine!)
+    addWindow(-bw/2-0.01, by+bodyH/2-0.44, bd/2-0.70, 0.09, 0.66, 1.14);
+    addWindow( bw/2+0.01, by+bodyH/2-0.44, bd/2-0.70, 0.09, 0.66, 1.14);
+    // Schiebetür-Linie (Erkennungsmerkmal des Rumpo)
+    g.add(box(0.07, bodyH*0.70, 0.11, 0x060606, -bw/2-0.01, by-0.12, -0.26));
+    g.add(box(0.07, bodyH*0.70, 0.11, 0x060606,  bw/2+0.01, by-0.12, -0.26));
+    // Stoßstangen
+    g.add(box(bw+0.24, 0.26, 0.18, CHROME, 0, wr+0.19, bd/2+0.09));
+    g.add(box(bw+0.24, 0.24, 0.18, CHROME, 0, wr+0.17, -bd/2-0.09));
+    g.add(box(bw*0.50, 0.32, 0.10, GRILL, 0, wr+0.34, bd/2+0.05));
+    // Scheinwerfer (breite Blöcke)
+    g.add(box(0.64, 0.28, 0.10, HEAD, -0.68, by-bodyH/2+0.36, bd/2+0.05));
+    g.add(box(0.64, 0.28, 0.10, HEAD,  0.68, by-bodyH/2+0.36, bd/2+0.05));
+    g.add(box(0.60, 0.28, 0.10, TAIL, -0.68, by-bodyH/2+0.32, -bd/2-0.05));
+    g.add(box(0.60, 0.28, 0.10, TAIL,  0.68, by-bodyH/2+0.32, -bd/2-0.05));
+    // Radkästen
+    const wz4a = bd*0.31, wz4b = -bd*0.30;
+    [wz4a, wz4b].forEach(wz => g.add(box(bw+0.09, 0.09, 1.08, CHROME, 0, wr+0.04, wz)));
+    const wx4 = bw/2+0.08;
+    [wz4a, wz4b].forEach(wz => { addWheel(-wx4, wr, wz, wr, 0.27); addWheel(wx4, wr, wz, wr, 0.27); });
+    g.add(box(bw-0.22, 0.14, bd-0.28, SNOW_C, 0, by+bodyH/2+0.07, 0));
+    return;
+  }
+
+  // ================================================================
+  // TYPE 5: SUV/LANDSTALKER — Hoch, breit, Geländeräder, Dachträger
+  // Off-Road-Look, Liberty City Vorort-Fahrzeug
+  // ================================================================
+  {
+    const wr = 0.42, bw = 2.22;
+    const by = wr+0.72;
+    // Karosserie (breit + hoch)
+    g.add(box(bw, 0.74, 4.62, col, 0, by, 0));
+    // Kabine (breit, robust)
+    const caby = by+0.74/2+0.72/2;
+    g.add(box(2.08, 0.72, 2.42, col, 0, caby, 0));
+    // Fenster
+    addWindow(0,    caby+0.02,  1.20, 1.92, 0.58, 0.09);
+    addWindow(0,    caby-0.01, -1.20, 1.86, 0.54, 0.09);
+    addWindow(-bw/2-0.01, caby, 0, 0.09, 0.58, 2.00);
+    addWindow( bw/2+0.01, caby, 0, 0.09, 0.58, 2.00);
+    // Stoßstangen (massiv — Geländefahrzeug)
+    g.add(box(bw+0.28, 0.26, 0.20, CHROME, 0, wr+0.17, 2.42));
+    g.add(box(bw+0.28, 0.24, 0.20, CHROME, 0, wr+0.15, -2.40));
+    g.add(box(bw*0.58, 0.32, 0.10, GRILL, 0, wr+0.34, 2.38));
+    // Scheinwerfer (groß, quadratisch)
+    g.add(box(0.62, 0.28, 0.11, HEAD, -0.74, wr+0.40, 2.40));
+    g.add(box(0.62, 0.28, 0.11, HEAD,  0.74, wr+0.40, 2.40));
+    g.add(box(0.62, 0.26, 0.11, TAIL, -0.74, wr+0.36, -2.38));
+    g.add(box(0.62, 0.26, 0.11, TAIL,  0.74, wr+0.36, -2.38));
+    // Große Radkästen
+    [1.50, -1.30].forEach(wz => g.add(box(bw+0.11, 0.09, 1.12, CHROME, 0, wr+0.04, wz)));
+    const wx5 = bw/2+0.10;
+    [1.50, -1.30].forEach(wz => { addWheel(-wx5, wr, wz, wr, 0.32); addWheel(wx5, wr, wz, wr, 0.32); });
+    // Dachgepäckträger (einfache Stangen — GTA3 Low-Poly)
+    const rry = caby+0.72/2+0.06, rrw = 1.86;
+    g.add(box(rrw, 0.07, 0.10, 0x777777, 0, rry,  2.42/2-0.40));
+    g.add(box(rrw, 0.07, 0.10, 0x777777, 0, rry, -2.42/2+0.40));
+    g.add(box(0.07, 0.08, 2.42-0.82, 0x777777, -rrw/2, rry, 0));
+    g.add(box(0.07, 0.08, 2.42-0.82, 0x777777,  rrw/2, rry, 0));
+    g.add(box(2.04, 0.11, 2.30, SNOW_C, 0, caby+0.72/2+0.055, 0));
+  }
 }
 
 // ================================================================
@@ -1798,10 +2148,10 @@ function addParkedCar(px, pz, ry, ci, type) {
   g.rotation.y = ry;
   scene.add(g);
 
-  // Physik-Kollider (konservativ je Typ)
-  const HW = [0.90, 0.90, 0.96, 0.85, 1.01][type];
-  const HH = [0.65, 0.70, 0.80, 0.62, 1.00][type];
-  const HD = [2.25, 2.30, 2.20, 1.80, 2.50][type];
+  // Physik-Kollider — 6 Typen: Sedan/Taxi/Mafia/Pickup/Van/SUV
+  const HW = [0.97, 1.04, 0.95, 1.01, 1.00, 1.07][type];
+  const HH = [0.62, 0.68, 0.60, 0.72, 1.00, 0.80][type];
+  const HD = [2.34, 2.34, 2.48, 2.44, 2.57, 2.31][type];
   const cb = new CANNON.Body({ mass: 0 });
   cb.addShape(new CANNON.Box(new CANNON.Vec3(HW, HH, HD)));
   cb.position.set(px, HH, pz);
@@ -2051,15 +2401,17 @@ const MAX_BRAKE   = 90;
 //  NPC CARS
 // ================================================================
 const npcs = [];
-// GTA 3: NPC-Autofarben — gedeckt, entsättigt
-const npcColors = [0x883333, 0x2d4477, 0x2d6633, 0x887733, 0x553355];
+// GTA 3: NPC-Autofarben — gedeckt, Liberty City typisch
+const npcColors = [0x8b2323, 0x1a3a78, 0x2d5a3d, 0x6a6a72, 0x1a1a1a, 0x7a5a22];
 
 function spawnNPC(px, pz, dir, spd) {
   const col = npcColors[Math.floor(Math.random()*npcColors.length)];
+  // GTA3-Stil: buildCarMesh verwenden für authentischen Look
+  const type = Math.floor(Math.random() * CAR_TYPE_COUNT);
   const g = new THREE.Group();
-  g.add(box(1.6, 0.65, 3.4, col, 0, 0.65, 0));
-  g.add(box(1.45, 0.6, 1.75, col, 0, 1.33, -0.2));
+  buildCarMesh(g, col, type);
   g.position.set(px, 0, pz);
+  g.rotation.y = dir > 0 ? 0 : Math.PI; // Front bei +Z
   scene.add(g);
   npcs.push({ mesh: g, dir, spd, lane: px, minZ: -92, maxZ: 92 });
 }
@@ -2076,32 +2428,25 @@ spawnNPC( 2, -80, -1, 0.050);
 // ================================================================
 //  TRAFFIC CARS (fahrende Autos auf allen 6 Straßen)
 // ================================================================
-// GTA 3: Verkehrsfarben — gedeckt, urban, nicht bunt
+// GTA 3: Verkehrsfarben — gedeckt, Liberty City urban
 function randomColor() {
-  return [0x882222, 0x1e3a88, 0x1e6633, 0x887722, 0x747474, 0xcccccc, 0x663377][Math.floor(Math.random()*7)];
+  return [0x8b2323, 0x1e3a88, 0x2d5a3d, 0x6a6a72, 0x1a1a1a, 0xd4c9a8, 0x7a5a22][Math.floor(Math.random()*7)];
 }
 
 function spawnCar(startX, startZ, dir, lane, speed, color) {
-  // Zufälliger Fahrzeugtyp für jeden Verkehrsteilnehmer
   const type = Math.floor(Math.random() * CAR_TYPE_COUNT);
   const g = new THREE.Group();
+  // buildCarMesh beinhaltet jetzt Scheinwerfer + Rücklichter
   buildCarMesh(g, color, type);
-  // Scheinwerfer (immer vorne, unabhängig vom Typ)
-  const fz = [4.50, 4.60, 4.40, 3.60, 5.00][type] / 2 + 0.08;
-  g.add(box(0.28, 0.16, 0.07, 0xffffcc, -0.60, [0.57, 0.57, 0.65, 0.54, 0.55][type],  fz));
-  g.add(box(0.28, 0.16, 0.07, 0xffffcc,  0.60, [0.57, 0.57, 0.65, 0.54, 0.55][type],  fz));
-  // Rücklichter
-  g.add(box(0.28, 0.16, 0.07, 0xff2200, -0.60, [0.57, 0.57, 0.65, 0.54, 0.55][type], -fz));
-  g.add(box(0.28, 0.16, 0.07, 0xff2200,  0.60, [0.57, 0.57, 0.65, 0.54, 0.55][type], -fz));
   // Ausrichtung nach Fahrtrichtung
   g.position.set(startX, 0, startZ);
   if (dir === 'OW')             g.rotation.y =  Math.PI / 2;
   if (lane < 0 && dir === 'NS') g.rotation.y =  Math.PI;
   if (lane < 0 && dir === 'OW') g.rotation.y = -Math.PI / 2;
   scene.add(g);
-  // Physik-Body (angepasst je Typ)
-  const HH = [0.65, 0.70, 0.80, 0.62, 1.00][type];
-  const shape = new CANNON.Box(new CANNON.Vec3(1.0, HH, 2.1));
+  // Physik — 6 Typen: Sedan/Taxi/Mafia/Pickup/Van/SUV
+  const HH = [0.62, 0.68, 0.60, 0.72, 1.00, 0.80][type];
+  const shape = new CANNON.Box(new CANNON.Vec3(1.0, HH, 2.2));
   const body  = new CANNON.Body({ mass: 800, shape });
   body.position.set(startX, HH, startZ);
   body.linearDamping  = 0.99;
@@ -2187,8 +2532,30 @@ function createDogMesh(color) {
 
 function spawnPed(px, pz, pz1, pz2) {
   const g = new THREE.Group();
-  g.add(box(0.38, 1.0, 0.28, 0x5a3e8a, 0, 0.5, 0));
-  g.add(cyl(0.18, 0.18, 0.32, 8, 0xffcc88, 0, 1.18, 0));
+  // GTA 3: Blockige Körper, keine Rundungen, keine Gesichtsdetails
+  const pedType = Math.floor(Math.random() * 3);
+  const skinCols = [0xc8946a, 0xa06038, 0xe0c090, 0x70401e];
+  const skinCol  = skinCols[Math.floor(Math.random() * skinCols.length)];
+
+  if (pedType === 0) {
+    // Business-Typ: grauer Anzug (Liberty City Büroarbeiter)
+    g.add(box(0.40, 0.58, 0.28, 0x888888, 0, 0.97, 0));  // Jacke
+    g.add(box(0.36, 0.62, 0.26, 0x555568, 0, 0.31, 0));  // Hose
+    g.add(box(0.05, 0.26, 0.05, 0xddddcc, 0, 1.12, 0.14)); // Krawatte
+  } else if (pedType === 1) {
+    // Casual-Typ: Jeans + Jacke (Straßenpassant)
+    g.add(box(0.40, 0.58, 0.28, 0x1e3a8a, 0, 0.97, 0));  // Jacke
+    g.add(box(0.36, 0.62, 0.26, 0x2a4488, 0, 0.31, 0));  // Jeans
+  } else {
+    // Arbeiter: Overall (Liberty City Bauarbeiter)
+    g.add(box(0.42, 1.20, 0.30, 0xf5a020, 0, 0.64, 0));  // Overall
+  }
+  // Kopf: BLOCK (kein Zylinder — GTA3 Erkennungsmerkmal!)
+  g.add(box(0.30, 0.30, 0.24, skinCol, 0, 1.38, 0));
+  // Schuhe (kleine dunkle Blöcke)
+  g.add(box(0.15, 0.10, 0.24, 0x111111, -0.10, 0.06, 0.04));
+  g.add(box(0.15, 0.10, 0.24, 0x111111,  0.10, 0.06, 0.04));
+
   g.position.set(px, 0, pz);
   scene.add(g);
 
@@ -2883,7 +3250,8 @@ function animate() {
   // ---- NPCs ----
   npcs.forEach(n => {
     n.mesh.position.z += n.dir * n.spd;
-    n.mesh.rotation.y  = n.dir > 0 ? Math.PI : 0;
+    // buildCarMesh hat Front bei +Z → dir>0 (Richtung +Z) = rotation.y=0, dir<0 = PI
+    n.mesh.rotation.y  = n.dir > 0 ? 0 : Math.PI;
     if (n.mesh.position.z > n.maxZ) n.dir = -1;
     if (n.mesh.position.z < n.minZ) n.dir =  1;
   });
